@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ระบบจัดสอนแทน KJST</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap">
+<style>
+/* ระบบจัดสอนแทน (Mockup) — โทนสีเดียวกับ KJST TimeTable Studio: กรมท่า + ทอง */
+:root{
+  --bg:#F4F6FA; --surface:#FFFFFF; --surface2:#F8F9FC; --ink:#152038; --muted:#5E6782; --line:#DDE2EC; --soft:#EEF1F7;
+  --navy:#0a2463; --navy2:#1d3a8a; --navy-ink:#fff; --accent:#1d3a8a; --gold:#d4a017; --gold2:#f4c430; --gold-soft:#FDF4DC;
+  --ok:#15803d; --ok-bg:#DCFCE7; --warn:#B45309; --warn-bg:#FEF3C7; --bad:#B91C1C; --bad-bg:#FEE2E2; --info:#1D4ED8; --info-bg:#DBEAFE; --mute-bg:#EEF0F4;
+  --t-personal:#B45309; --t-personal-bg:#FEF3C7; --t-official:#1D4ED8; --t-official-bg:#DBEAFE;
+  --t-mission:#7C3AED; --t-mission-bg:#EDE9FE; --t-sick:#BE123C; --t-sick-bg:#FFE4E6;
+  --g0:#C23B5A; --g1:#2F64C0; --g2:#23874D; --g3:#B07612; --g4:#C9601E; --g5:#8A4FC2; --g6:#8A6440; --g7:#1A8597; --g8:#56708A;
+  --shadow:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.06);
+  --f-body:'Sarabun','Leelawadee UI','Thonburi',system-ui,sans-serif;
+  --f-head:'Prompt','Sarabun','Leelawadee UI',system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0D1222; --surface:#161D31; --surface2:#1A2238; --ink:#E6EAF5; --muted:#9AA3C0; --line:#2A3352; --soft:#1F2843;
+  --navy:#111A3D; --navy2:#1B2A63; --accent:#9DB0F5; --gold:#E3B654; --gold2:#F2CD72; --gold-soft:#3A3120;
+  --ok:#4ADE80; --ok-bg:#12321F; --warn:#FBBF24; --warn-bg:#3A2D10; --bad:#F87171; --bad-bg:#3B1717; --info:#93B4FF; --info-bg:#1A2A4F; --mute-bg:#242B40;
+  --t-personal:#FBBF24; --t-personal-bg:#3A2D10; --t-official:#93B4FF; --t-official-bg:#1A2A4F;
+  --t-mission:#C4B5FD; --t-mission-bg:#2C2250; --t-sick:#FDA4AF; --t-sick-bg:#3F1621;
+  --g0:#F28CA4; --g1:#8DB4F5; --g2:#7FD3A2; --g3:#E9C06A; --g4:#F2A26C; --g5:#C9A2F0; --g6:#D2AE88; --g7:#79CEDC; --g8:#A7BBCF;
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0D1222; --surface:#161D31; --surface2:#1A2238; --ink:#E6EAF5; --muted:#9AA3C0; --line:#2A3352; --soft:#1F2843;
+  --navy:#111A3D; --navy2:#1B2A63; --accent:#9DB0F5; --gold:#E3B654; --gold2:#F2CD72; --gold-soft:#3A3120;
+  --ok:#4ADE80; --ok-bg:#12321F; --warn:#FBBF24; --warn-bg:#3A2D10; --bad:#F87171; --bad-bg:#3B1717; --info:#93B4FF; --info-bg:#1A2A4F; --mute-bg:#242B40;
+  --t-personal:#FBBF24; --t-personal-bg:#3A2D10; --t-official:#93B4FF; --t-official-bg:#1A2A4F;
+  --t-mission:#C4B5FD; --t-mission-bg:#2C2250; --t-sick:#FDA4AF; --t-sick-bg:#3F1621;
+  --g0:#F28CA4; --g1:#8DB4F5; --g2:#7FD3A2; --g3:#E9C06A; --g4:#F2A26C; --g5:#C9A2F0; --g6:#D2AE88; --g7:#79CEDC; --g8:#A7BBCF;
+  --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark }
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--f-head);font-weight:600;margin:0;line-height:1.3}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+.muted{color:var(--muted)} .small{font-size:13px} .tiny{font-size:12px} .nowrap{white-space:nowrap}
+.num{font-variant-numeric:tabular-nums}
+.hide{display:none!important}
+
+/* ---------- header ---------- */
+header.top{background:linear-gradient(120deg,var(--navy) 0%,var(--navy2) 80%);color:#fff;border-bottom:4px solid var(--gold)}
+.top-in{max-width:1280px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.logo{width:44px;height:44px;border-radius:50%;background:#fff;padding:3px;border:2px solid var(--gold);flex:none;object-fit:contain}
+.brand h1{font-size:18px;color:#fff;letter-spacing:.2px}
+.brand .sub{font-size:12.5px;opacity:.85}
+.top-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.bell{position:relative;background:rgba(255,255,255,.12);border:0;border-radius:10px;width:40px;height:40px;display:grid;place-items:center;color:#fff;cursor:pointer}
+.bell .dot{position:absolute;top:4px;right:4px;background:var(--gold2);color:#231b00;font-size:11px;font-weight:700;border-radius:9px;min-width:18px;height:18px;display:grid;place-items:center;padding:0 4px}
+.me{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border-radius:10px;padding:4px 10px 4px 4px;cursor:pointer;border:0;color:#fff;max-width:280px}
+.av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:14px;flex:none;background:var(--gold);color:#231b00}
+.me .nm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me .rl{font-size:11.5px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+nav.tabs{background:var(--surface);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+.tabs-in{max-width:1280px;margin:0 auto;padding:0 8px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+.tabs-in::-webkit-scrollbar{display:none}
+.tab{background:none;border:0;padding:12px 14px;font-weight:600;font-size:14.5px;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--accent);border-bottom-color:var(--gold)}
+.tab .c{background:var(--bad);color:#fff;border-radius:9px;font-size:11px;padding:0 6px;min-width:18px;text-align:center}
+.demo-bar{background:var(--gold-soft);color:var(--ink);font-size:13px;border-bottom:1px solid var(--line)}
+.demo-bar .in{max-width:1280px;margin:0 auto;padding:6px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+main{max-width:1280px;margin:0 auto;padding:18px 16px 60px}
+
+/* ---------- generic ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.card-h h3{font-size:16px}
+.card-b{padding:14px 16px}
+.page-h{display:flex;align-items:flex-end;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.page-h h2{font-size:22px}
+.page-h .r{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.grid{display:grid;gap:14px}
+.grid>*{min-width:0}
+@media (max-width:640px){.brand .sub{display:none}.me .rl{display:none}.me{max-width:150px}}
+.g2{grid-template-columns:1fr 1fr} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:900px){.g2,.g3{grid-template-columns:1fr}.g4{grid-template-columns:1fr 1fr}}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 14px;font-weight:600;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;color:var(--ink);white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--navy2);border-color:var(--navy2);color:#fff}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#231b00}
+.btn.ok{background:#15803d;border-color:#15803d;color:#fff}
+.btn.bad{background:transparent;border-color:var(--bad);color:var(--bad)}
+.btn.sm{padding:5px 10px;font-size:13px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 10px;font-size:12.5px;font-weight:600;white-space:nowrap;line-height:1.6}
+.chip .d{width:7px;height:7px;border-radius:50%;background:currentColor}
+.s-ack{background:var(--warn-bg);color:var(--warn)} .s-fix{background:var(--bad-bg);color:var(--bad)}
+.s-review{background:var(--info-bg);color:var(--info)} .s-approved{background:var(--ok-bg);color:var(--ok)}
+.s-returned{background:var(--bad-bg);color:var(--bad)} .s-cancelled{background:var(--mute-bg);color:var(--muted)}
+.s-na{background:var(--mute-bg);color:var(--muted)}
+.ty-personal{background:var(--t-personal-bg);color:var(--t-personal)} .ty-official{background:var(--t-official-bg);color:var(--t-official)}
+.ty-mission{background:var(--t-mission-bg);color:var(--t-mission)} .ty-sick{background:var(--t-sick-bg);color:var(--t-sick)}
+.gtag{display:inline-block;border-radius:6px;padding:0 7px;font-size:12px;font-weight:600;border:1px solid currentColor;white-space:nowrap;line-height:1.6}
+input[type=text],input[type=date],input[type=password],select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 10px;font-size:14.5px;width:100%}
+textarea{min-height:70px;resize:vertical}
+label.f{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.field{margin-bottom:12px}
+table.t{width:100%;border-collapse:collapse;font-size:14px}
+table.t th{text-align:left;font-weight:600;color:var(--muted);font-size:12.5px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--surface2);white-space:nowrap}
+table.t td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t tr.click{cursor:pointer} table.t tr.click:hover td{background:var(--soft)}
+table.t th.sort{cursor:pointer} table.t th.sort:hover{color:var(--ink)}
+.tbl-wrap{overflow-x:auto}
+.empty{padding:28px 16px;text-align:center;color:var(--muted)}
+.kpi{padding:14px 16px;border-left:4px solid var(--gold)}
+.kpi .v{font-family:var(--f-head);font-size:28px;font-weight:700;line-height:1.1}
+.kpi .l{font-size:13px;color:var(--muted);margin-top:2px}
+.note{background:var(--info-bg);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:13.5px;border-left:4px solid var(--info)}
+.note.warn{background:var(--warn-bg);border-left-color:var(--warn)}
+.note.bad{background:var(--bad-bg);border-left-color:var(--bad)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sp{flex:1}
+hr.sep{border:0;border-top:1px solid var(--line);margin:12px 0}
+
+/* ---------- stepper ---------- */
+.steps{display:flex;gap:0;align-items:center;flex-wrap:wrap;font-size:13px}
+.step{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.step .b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--mute-bg);color:var(--muted)}
+.step.done{color:var(--ok)} .step.done .b{background:var(--ok);color:#fff}
+.step.cur{color:var(--ink);font-weight:600} .step.cur .b{background:var(--gold);color:#231b00}
+.step.err{color:var(--bad)} .step.err .b{background:var(--bad);color:#fff}
+.step+.step:before{content:"";width:22px;height:2px;background:var(--line);margin:0 6px}
+
+/* ---------- wizard ---------- */
+.types{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media (max-width:900px){.types{grid-template-columns:1fr 1fr}}
+.type{border:2px solid var(--line);border-radius:12px;padding:12px;cursor:pointer;background:var(--surface);text-align:left}
+.type:hover{border-color:var(--accent)}
+.type.on{border-color:var(--gold);background:var(--gold-soft)}
+.type .h{display:flex;align-items:center;gap:8px;font-weight:700;font-family:var(--f-head)}
+.type .h i{width:12px;height:12px;border-radius:4px;display:inline-block}
+.type p{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+.type:disabled{opacity:.4;cursor:not-allowed}
+.item{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.item.done{border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
+.item.need{border-color:color-mix(in srgb,var(--bad) 55%,var(--line))}
+.item-h{display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer;flex-wrap:wrap}
+.item-h .per{background:var(--navy2);color:#fff;border-radius:8px;padding:3px 9px;font-weight:700;font-size:13px;white-space:nowrap}
+.item-h .what{font-weight:600}
+.item-h .pick{margin-left:auto;font-size:13.5px}
+.item-b{border-top:1px dashed var(--line);padding:12px 14px;background:var(--surface2)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface);flex-wrap:wrap}
+.seg button{border:0;background:none;padding:7px 12px;font-weight:600;font-size:13.5px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--navy2);color:#fff}
+.cand{display:grid;grid-template-columns:26px 1fr auto auto auto;gap:10px;align-items:center;padding:8px 10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+.cand:hover{background:var(--soft)}
+.cand.sel{border-color:var(--gold);background:var(--gold-soft)}
+.cand .rk{width:24px;height:24px;border-radius:50%;background:var(--mute-bg);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted)}
+.cand.sel .rk{background:var(--gold);color:#231b00}
+.cand .nm{font-weight:600;min-width:0}
+.cand .nm small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.load{display:flex;gap:2px;align-items:center}
+.load i{width:7px;height:14px;border-radius:2px;background:var(--line)}
+.load i.f{background:var(--accent)}
+.load i.s{background:var(--gold)}
+.cand-h{display:grid;grid-template-columns:26px 1fr auto auto auto;gap:10px;padding:4px 10px;font-size:12px;color:var(--muted);font-weight:600}
+@media (max-width:640px){.cand,.cand-h{grid-template-columns:24px 1fr auto}.cand .hm,.cand-h .hm{display:none}}
+.blocked{margin-top:8px;font-size:13px}
+.blocked summary{cursor:pointer;color:var(--muted);font-weight:600}
+.blocked ul{margin:6px 0 0;padding-left:18px;color:var(--muted)}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border-radius:10px;cursor:pointer;border:1px solid transparent}
+.opt:hover{background:var(--soft)} .opt.sel{border-color:var(--gold);background:var(--gold-soft)}
+.opt .when{font-weight:700;white-space:nowrap;min-width:150px}
+.sticky-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;align-items:center;border-radius:0 0 14px 14px;flex-wrap:wrap;z-index:5}
+.prog{height:8px;border-radius:4px;background:var(--mute-bg);overflow:hidden;width:160px}
+.prog i{display:block;height:100%;background:var(--ok)}
+
+/* ---------- day strip ---------- */
+.strip{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
+@media (max-width:640px){.strip{grid-template-columns:repeat(3,1fr)}}
+.slot{border-radius:8px;padding:6px;font-size:12px;min-height:58px;background:var(--surface2);border:1px solid var(--line)}
+.slot b{display:block;font-size:11.5px;color:var(--muted)}
+.slot.teach{background:var(--info-bg);border-color:transparent}
+.slot.subst{background:var(--gold-soft);border-color:var(--gold)}
+.slot.off{background:repeating-linear-gradient(45deg,var(--mute-bg),var(--mute-bg) 6px,transparent 6px,transparent 12px)}
+.slot.nt{background:var(--mute-bg)}
+
+/* ---------- heatmap / bars ---------- */
+.heat{display:grid;grid-template-columns:70px repeat(9,1fr);gap:3px;font-size:12px}
+.heat div{padding:6px 2px;text-align:center;border-radius:5px}
+.heat .hd{color:var(--muted);font-weight:600}
+.bar{display:grid;grid-template-columns:150px 1fr 40px;gap:8px;align-items:center;font-size:13px;margin-bottom:6px}
+.bar .tr{height:16px;background:var(--mute-bg);border-radius:4px;overflow:hidden;display:flex}
+.bar .tr i{display:block;height:100%}
+
+/* ---------- timeline ---------- */
+.tl{list-style:none;margin:0;padding:0}
+.tl li{position:relative;padding:0 0 12px 22px;font-size:13.5px}
+.tl li:before{content:"";position:absolute;left:5px;top:6px;width:9px;height:9px;border-radius:50%;background:var(--accent)}
+.tl li:after{content:"";position:absolute;left:9px;top:17px;bottom:0;width:1px;background:var(--line)}
+.tl li:last-child:after{display:none}
+
+/* ---------- modal / toast / dropdown ---------- */
+.ov{position:fixed;inset:0;background:rgba(10,15,30,.45);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
+.modal{background:var(--surface);border-radius:16px;max-width:960px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.modal.sm{max-width:480px}
+.modal-h{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center}
+.modal-h h3{font-size:17px}
+.modal-b{padding:16px 18px}
+.modal-f{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.x{margin-left:auto;background:none;border:0;font-size:22px;cursor:pointer;color:var(--muted);line-height:1}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 18px;border-radius:10px;z-index:200;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.dd{position:absolute;right:16px;top:58px;width:360px;max-width:calc(100vw - 24px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.18);z-index:90}
+.dd .it{padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13.5px}
+.dd .it:hover{background:var(--soft)}
+
+/* ---------- login ---------- */
+.login{min-height:100vh;display:grid;place-items:center;padding:20px;background:linear-gradient(160deg,var(--navy) 0%,var(--navy2) 55%,var(--bg) 55%)}
+.login .box{width:100%;max-width:440px}
+.login .head{text-align:center;color:#fff;margin-bottom:16px}
+.login .head img{width:84px;height:84px;border-radius:50%;background:#fff;border:3px solid var(--gold);padding:4px}
+.login .head h1{font-size:22px;color:#fff;margin-top:8px}
+.quick{display:grid;gap:8px}
+.quick button{text-align:left;border:1px solid var(--line);background:var(--surface2);border-radius:10px;padding:9px 12px;cursor:pointer}
+.quick button:hover{border-color:var(--accent)}
+.quick b{display:block;font-size:14px} .quick span{font-size:12.5px;color:var(--muted)}
+
+/* ---------- print ---------- */
+#print{display:none}
+@media print{
+  body *{visibility:hidden}
+  #print,#print *{visibility:visible}
+  #print{display:block;position:absolute;left:0;top:0;width:100%;color:#000;background:#fff;font-size:13px}
+  #print table{width:100%;border-collapse:collapse} #print th,#print td{border:1px solid #444;padding:4px 6px;text-align:left}
+  #print h2{font-size:18px;text-align:center} #print .sig{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:28px;text-align:center}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="print"></div>
+<script>
+"use strict";
+/* ================================================================
+   ข้อมูลตารางสอน 2/2569 (สร้างโดย substitution/build_data.py)
+   ================================================================ */
+const D = /*__DATA__*/null;
+
+/* ---------- constants ---------- */
+const NT = new Set(D.noCover);               // ไม่ต้องจัดสอนแทน (HR, ประชุม, PLC)
+const KEY = 'kjst-sub-mockup-v1';
+const GSHORT = ['ภาษาไทย','คณิตศาสตร์','วิทย์ฯ','สังคมฯ','สุขศึกษาฯ','ศิลปะ','การงานฯ','ต่างประเทศ','กิจกรรมฯ'];
+const TYPES = {
+  personal:{label:'ลากิจ',     rule:'ผู้ลาจัดสอนแทนเองล่วงหน้า', sick:false},
+  official:{label:'ไปราชการ',  rule:'ผู้ไปราชการจัดสอนแทนเองล่วงหน้า', sick:false},
+  mission: {label:'ติดภารกิจอื่น', rule:'ผู้ติดภารกิจจัดสอนแทนเองล่วงหน้า', sick:false},
+  sick:    {label:'ลาป่วย',    rule:'ผู้ลาจัดเอง หรือหัวหน้ากลุ่มสาระฯ จัดให้ (จัดวันนี้ได้)', sick:true},
+};
+const METHODS = {
+  sub:  {label:'ครูสอนแทน',       short:'สอนแทน'},
+  swapT:{label:'สลับคาบกับครูอื่น', short:'สลับกับครู'},
+  swapF:{label:'สลับคาบว่าง',      short:'สลับคาบว่าง'},
+  none: {label:'ครูร่วมสอนดูแล',    short:'ครูร่วมสอน'},
+};
+const RST = {
+  ack:{label:'รอรับทราบ'}, fix:{label:'ต้องจัดใหม่'}, review:{label:'รอเห็นชอบ'},
+  approved:{label:'สมบูรณ์'}, returned:{label:'ส่งกลับแก้ไข'}, cancelled:{label:'ยกเลิก'},
+};
+const MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const MONL = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const WDN = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+const WDS = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+
+/* ---------- indexes ---------- */
+const TAT = D.ts.map(rows => { const a=[...Array(5)].map(()=>Array(10).fill(null));
+  rows.forEach(r => a[r[0]][r[1]] = {code:r[2], subj:r[3], cls:r[4], room:r[5]}); return a; });
+const CAT = {};
+for (const [cls, rows] of Object.entries(D.cs)) { const a=[...Array(5)].map(()=>Array(10).fill(null));
+  rows.forEach(r => a[r[0]][r[1]] = {code:r[2], subj:r[3], tis:r[4], room:r[5]}); CAT[cls]=a; }
+const DUTY = {};
+for (const [ti, rows] of Object.entries(D.duty)) { DUTY[ti]={}; rows.forEach(([d,p,l]) => (DUTY[ti][d] ||= {})[p]=l); }
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2,'0');
+const isoOf = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const pd = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+const addD = (s,n) => { const d=pd(s); d.setDate(d.getDate()+n); return isoOf(d); };
+const wd = s => { const g=pd(s).getDay(); return g>=1&&g<=5 ? g-1 : -1; };
+const TODAY = isoOf(new Date());
+const fmtD = s => { const d=pd(s); return `${WDS[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} ${String(d.getFullYear()+543).slice(2)}`; };
+const fmtL = s => { const d=pd(s); return `วัน${WDN[d.getDay()]}ที่ ${d.getDate()} ${MONL[d.getMonth()]} ${d.getFullYear()+543}`; };
+const fmtDT = t => { const d=new Date(t); return `${d.getDate()} ${MON[d.getMonth()]} ${String(d.getFullYear()+543).slice(2)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const diffDays = (a,b) => Math.round((pd(b)-pd(a))/864e5);
+const tn = ti => ti==null ? 'หัวหน้ากลุ่มบริหารงานวิชาการ' : D.teachers[ti].n;
+const sn = ti => ti==null ? 'หน.วิชาการ' : D.teachers[ti].n.replace(/^(ว่าที่ร้อยตรี|สิบเอก|นางสาว|นาง|นาย|Mr\.\s?|Ms\.\s?)/,'');
+const initials = ti => sn(ti).trim().charAt(0);
+const gOf = ti => D.teachers[ti].g;
+const gtag = g => `<span class="gtag" style="color:var(--g${g})">${esc(GSHORT[g])}</span>`;
+const perT = p => D.times[p].replace(' น.','');
+const tyChip = t => `<span class="chip ty-${t}">${TYPES[t].label}</span>`;
+const stChip = st => `<span class="chip s-${st}"><span class="d"></span>${RST[st].label}</span>`;
+const ackChip = a => a==='ack' ? '<span class="chip s-approved">✓ รับทราบแล้ว</span>' : a==='pending' ? '<span class="chip s-ack">รอรับทราบ</span>' : a==='declined' ? '<span class="chip s-fix">ขอเปลี่ยน</span>' : '<span class="chip s-na">ไม่ต้องรับทราบ</span>';
+const levelOf = cls => (cls.match(/^ม\.\d/)||[''])[0];
+const mulberry = a => () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; };
+
+/* ---------- state ---------- */
+let S, ME = null, VIEW = 'home', W = null, UI = {tab:{}, open:null, more:{}, cache:{}, listTab:'mine', apTab:'review', statSort:'need', board:null, logQ:''};
+function defaults(){
+  const heads = {};
+  D.groups.forEach((g,i) => { const m = D.teachers.map((t,ti)=>({...t,ti})).filter(t=>t.g===i); heads[i] = m.length ? m[0].ti : null; });
+  return { termStart:'2026-11-02', termEnd:'2027-03-31', maxAhead:30, leadDays:1,
+           holidays:['2026-12-07','2026-12-10','2026-12-31','2027-01-01','2027-02-12','2027-03-03'],
+           deptHeads:heads, acadHead:null };
+}
+function load(){ try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v===1) return s; } catch(e){} return null; }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }
+function sess(){ try { return JSON.parse(sessionStorage.getItem(KEY+'-me')); } catch(e){ return null; } }
+function saveSess(){ try { sessionStorage.setItem(KEY+'-me', JSON.stringify(ME)); } catch(e){} }
+
+/* ---------- calendar ---------- */
+function isSchool(s){ return wd(s)>=0 && !S.settings.holidays.includes(s) && s>=S.settings.termStart && s<=S.settings.termEnd; }
+function schoolDays(a,b){ const r=[]; for(let s=a; s<=b; s=addD(s,1)) if(isSchool(s)) r.push(s); return r; }
+function nthSchool(k){ // k>=0 : k-th school day from today (0 = today or next), k<0 : previous
+  let s=TODAY, n=0;
+  let guard=0;
+  if (k>=0){ while(!isSchool(s) && guard++<400) s=addD(s,1); while(n<k && guard++<400){ s=addD(s,1); if(isSchool(s)) n++; } return guard>=400 ? TODAY : s; }
+  while(n>k){ s=addD(s,-1); if(isSchool(s)) n--; if(s<S.settings.termStart) return null; } return s;
+}
+const maxDate = () => addD(TODAY, S.settings.maxAhead);
+
+/* ================================================================
+   เครื่องตรวจสอบภาระ (Conflict engine)
+   ตารางปกติ + การจัดสอนแทน/สลับคาบที่มีอยู่แล้ว + การลาของครู
+   ================================================================ */
+const K = (t,d,p) => t+'|'+d+'|'+p;
+function occupancy(extra, skipItem){
+  const O = {leave:{}, occ:{}, freed:{}, classIn:{}};
+  const reqs = S.requests.filter(r => !(extra && r.id===extra.id));
+  if (extra) reqs.push(extra);
+  for (const r of reqs){
+    if (r.status==='cancelled') continue;
+    for (const d of r.dates) O.leave[r.teacher+'|'+d] = r;
+    for (const it of r.items){
+      if (it===skipItem || (skipItem && it.id===skipItem.id && r===extra) || it.ack==='declined' || !it.method || it.method==='none') continue;
+      if (it.method==='sub') O.occ[K(it.sub,it.date,it.p)] = {t:'สอนแทน', cls:it.cls, r};
+      else if (it.method==='swapT'){ const s=it.swap;
+        O.occ[K(s.t,it.date,it.p)] = {t:'สลับคาบ', cls:it.cls, r};
+        O.freed[K(s.t,s.date,s.p)] = r;
+        O.occ[K(r.teacher,s.date,s.p)] = {t:'สลับคาบ', cls:it.cls, r}; }
+      else if (it.method==='swapF'){ const s=it.swap;
+        O.occ[K(r.teacher,s.date,s.p)] = {t:'สอนชดเชย', cls:it.cls, r};
+        O.classIn[it.cls+'|'+s.date+'|'+s.p] = r; }
+    }
+  }
+  return O;
+}
+function busy(ti, d, p, O){
+  const L = O.leave[ti+'|'+d]; if (L) return {kind:'leave', why:`${TYPES[L.type].label}ในวันนี้`};
+  const o = O.occ[K(ti,d,p)];  if (o) return {kind:'sub', why:`ถูกจัด${o.t} ${o.cls} ให้ ${sn(o.r.teacher)} แล้ว`};
+  const w = wd(d); const e = w>=0 && TAT[ti][w][p];
+  if (e && !O.freed[K(ti,d,p)]) return {kind:'base', why:`มีสอน ${e.code} ${e.cls}`};
+  return null;
+}
+function dayLoad(ti, d, O){ // จำนวนคาบสอนจริงในวันนั้น (ตารางปกติ + สอนแทน/สลับ)
+  const w=wd(d); let base=0, extra=0;
+  for (let p=1;p<=9;p++){ const e=TAT[ti][w][p];
+    if (O.occ[K(ti,d,p)]) extra++; else if (e && !NT.has(e.code) && !O.freed[K(ti,d,p)]) base++; }
+  return {base, extra, total:base+extra};
+}
+function cumSubs(){ const c={};
+  for (const r of S.requests){ if (r.status==='cancelled') continue;
+    for (const it of r.items){ if (it.ack==='declined') continue;
+      if (it.method==='sub') c[it.sub]=(c[it.sub]||0)+1;
+      if (it.method==='swapT') c[it.swap.t]=(c[it.swap.t]||0)+1; } }
+  return c;
+}
+function candSub(req, item){
+  const O = occupancy(req, item), C = cumSubs(), g = gOf(req.teacher), w = wd(item.date);
+  const avail=[], blocked=[];
+  D.teachers.forEach((t,ti) => {
+    if (ti===req.teacher) return;
+    if ((item.declinedBy||[]).includes(ti)){ blocked.push({ti, same:t.g===g, why:'ขอเปลี่ยนคาบนี้ไปแล้ว'}); return; }
+    const b = busy(ti, item.date, item.p, O);
+    if (!b) avail.push({ti, same:t.g===g, load:dayLoad(ti,item.date,O), cum:C[ti]||0, duty:DUTY[ti]?.[w]?.[item.p]});
+    else if (b.kind!=='base') blocked.push({ti, same:t.g===g, why:b.why});
+  });
+  avail.sort((a,b)=>(b.same-a.same)||(a.load.total-b.load.total)||(a.cum-b.cum)||D.teachers[a.ti].n.localeCompare(D.teachers[b.ti].n,'th'));
+  blocked.sort((a,b)=>(b.same-a.same));
+  return {avail, blocked};
+}
+function swapWindow(req, item){
+  const from = [TODAY, addD(item.date,-7)].sort()[1], to = [maxDate(), addD(item.date,14)].sort()[0];
+  return schoolDays(from, to).filter(d => !req.dates.includes(d));
+}
+function candSwapT(req, item){
+  if (!CAT[item.cls]) return {err:'คาบนี้เป็นกลุ่มเรียนรวม/กิจกรรม (ไม่ใช่ห้องเรียนปกติ) จึงสลับคาบกับครูอื่นไม่ได้'};
+  const O = occupancy(req, item), g = gOf(req.teacher), list=[];
+  for (const d of swapWindow(req,item)){ const w=wd(d);
+    for (let p=1;p<=9;p++){ const ce=CAT[item.cls][w][p];
+      if (!ce || NT.has(ce.code) || ce.tis.length!==1 || ce.tis[0]===req.teacher) continue;
+      const B=ce.tis[0];
+      if (O.freed[K(B,d,p)] || O.leave[B+'|'+d]) continue;
+      if (d===TODAY) continue;
+      if (busy(B, item.date, item.p, O)) continue;
+      if (busy(req.teacher, d, p, O)) continue;
+      list.push({t:B, date:d, p, code:ce.code, subj:ce.subj, same:gOf(B)===g});
+    } }
+  list.sort((a,b)=>Math.abs(diffDays(item.date,a.date))-Math.abs(diffDays(item.date,b.date)) || (b.same-a.same) || a.p-b.p);
+  return {list};
+}
+function candSwapF(req, item){
+  if (!CAT[item.cls]) return {err:'คาบนี้เป็นกลุ่มเรียนรวม/กิจกรรม จึงย้ายไปคาบว่างไม่ได้'};
+  const O = occupancy(req, item), lunch = D.lunch[levelOf(item.cls)], list=[];
+  for (const d of swapWindow(req,item)){ const w=wd(d); if (d===TODAY) continue;
+    for (let p=1;p<=9;p++){
+      if (CAT[item.cls][w][p] || p===lunch) continue;
+      if (O.classIn[item.cls+'|'+d+'|'+p]) continue;
+      if (busy(req.teacher, d, p, O)) continue;
+      list.push({date:d, p});
+    } }
+  list.sort((a,b)=>Math.abs(diffDays(item.date,a.date))-Math.abs(diffDays(item.date,b.date)) || a.p-b.p);
+  return {list};
+}
+function coTeachers(req, item){
+  const ce = CAT[item.cls]?.[wd(item.date)]?.[item.p];
+  if (!ce || ce.code!==item.code) return [];
+  const O = occupancy(req, item);
+  return ce.tis.filter(t => t!==req.teacher && !O.leave[t+'|'+item.date]);
+}
+
+/* ---------- request status ---------- */
+function rst(r){
+  if (['cancelled','approved','returned'].includes(r.status)) return r.status;
+  if (r.items.some(i=>i.ack==='declined')) return 'fix';
+  if (r.items.some(i=>i.ack==='pending')) return 'ack';
+  return 'review';
+}
+const coverItems = r => r.items.filter(i => !NT.has(i.code));
+const ackNeeded = it => it.method==='sub' || it.method==='swapT';
+const ackWho = it => it.method==='sub' ? it.sub : it.method==='swapT' ? it.swap.t : null;
+function buildItems(teacher, dates){
+  const items=[];
+  for (const d of dates){ const w=wd(d);
+    for (let p=1;p<=9;p++){ const e=TAT[teacher][w][p]; if (!e) continue;
+      items.push({id:d+'-'+p, date:d, p, code:e.code, subj:e.subj, cls:e.cls, room:e.room,
+                  method: NT.has(e.code) ? 'none' : null, ack:null}); } }
+  return items;
+}
+function log(act, rid, detail){ S.log.unshift({at:new Date().toISOString(), by: ME ? ME.name : 'ระบบ', act, rid, detail}); }
+function hist(r, act, note, at){ r.history.push({at: at || new Date().toISOString(), by: ME ? ME.name : 'ระบบ', act, note: note||''}); }
+
+/* ---------- roles ---------- */
+function rolesOf(ti){
+  const r=['teacher'];
+  if (ti!=null && Object.entries(S.settings.deptHeads).some(([g,h])=>h===ti)) r.push('dept');
+  if (ti!=null && S.settings.acadHead===ti) r.push('acad');
+  return r;
+}
+function headGroups(ti){ return Object.entries(S.settings.deptHeads).filter(([g,h])=>h===ti).map(([g])=>+g); }
+const isAcad = () => ME && ME.roles.includes('acad');
+const isDept = () => ME && ME.roles.includes('dept');
+function login(ti, acad){
+  if (acad) ME = {ti: S.settings.acadHead, name: S.settings.acadHead!=null ? tn(S.settings.acadHead) : 'หัวหน้ากลุ่มบริหารงานวิชาการ', roles: [...new Set([...(S.settings.acadHead!=null?rolesOf(S.settings.acadHead):[]), 'acad','admin'])]};
+  else ME = {ti, name: tn(ti), roles: rolesOf(ti)};
+  if (!ME.roles.includes('teacher') && ME.ti!=null) ME.roles.push('teacher');
+  saveSess(); VIEW='home'; W=null; render();
+}
+function canArrange(r){ if (!ME) return false; if (isAcad()) return true;
+  if (r.teacher===ME.ti) return true;
+  return r.type==='sick' && headGroups(ME.ti).includes(gOf(r.teacher)); }
+
+/* ================================================================
+   ข้อมูลตัวอย่าง (สร้างจากตารางสอนจริง + อัลกอริทึมเดียวกับระบบ)
+   ================================================================ */
+function seed(){
+  S = {v:1, seq:0, settings:defaults(), requests:[], log:[], demo:{}};
+  const rnd = mulberry(2569);
+  const pickT = (d, used, min=4) => { const w=wd(d); const c=D.teachers.map((t,ti)=>ti).filter(ti=>!used.has(ti) &&
+      TAT[ti][w].filter((e,p)=>p>0&&e&&!NT.has(e.code)).length>=min);
+    const ti=c[Math.floor(rnd()*c.length)]; used.add(ti); return ti; };
+  const used = new Set();
+  const stamp = (d, h, m) => { const x=pd(d); x.setHours(h,m||0); return x.toISOString(); };
+  function make(type, dates, opts={}){
+    const teacher = opts.teacher ?? pickT(dates[0], used);
+    const arrangedBy = opts.arrangedBy ?? teacher;
+    const r = {id:'', type, teacher, arrangedBy, dates, reason:opts.reason||'', status:'open', items:buildItems(teacher,dates),
+               createdAt: opts.created || stamp(addD(dates[0],-3), 15, 20), history:[], approvedAt:null, approvedBy:null, file: opts.file||null};
+    S.seq++; r.id = 'ST69-' + String(S.seq).padStart(4,'0');
+    S.requests.push(r);
+    r.history.push({at:r.createdAt, by:tn(arrangedBy), act:'สร้างคำขอและจัดสอนแทน', note:`${TYPES[type].label} ${dates.length} วัน`});
+    S.log.push({at:r.createdAt, by:tn(arrangedBy), act:'สร้างคำขอ', rid:r.id, detail:`${tn(teacher)} · ${TYPES[type].label} · ${dates.map(fmtD).join(', ')}`});
+    let k=0;
+    for (const it of r.items){ if (it.method) continue;
+      const want = (opts.methods||[])[k++] || 'sub';
+      if (want==='swapT'){ const c=candSwapT(r,it); if (c.list&&c.list.length){ it.method='swapT'; it.swap={t:c.list[0].t,date:c.list[0].date,p:c.list[0].p,code:c.list[0].code,subj:c.list[0].subj}; it.ack='pending'; continue; } }
+      if (want==='swapF'){ const c=candSwapF(r,it); if (c.list&&c.list.length){ it.method='swapF'; it.swap={date:c.list[0].date,p:c.list[0].p}; it.ack=null; continue; } }
+      const c=candSub(r,it); const pick = c.avail[Math.min(c.avail.length-1, opts.skip||0)];
+      if (pick){ it.method='sub'; it.sub=pick.ti; it.ack='pending'; }
+      else { const f=candSwapF(r,it); if (f.list&&f.list.length){ it.method='swapF'; it.swap={date:f.list[0].date,p:f.list[0].p}; } else it.method='none'; }
+    }
+    return r;
+  }
+  function ackAll(r, hours){ let i=0; for (const it of r.items) if (it.ack==='pending'){ it.ack='ack'; it.ackAt = new Date(new Date(r.createdAt).getTime()+(hours+i++*0.7)*36e5).toISOString();
+      r.history.push({at:it.ackAt, by:tn(ackWho(it)), act:'รับทราบ', note:`${fmtD(it.date)} คาบ ${it.p} ${it.cls}`});
+      S.log.push({at:it.ackAt, by:tn(ackWho(it)), act:'รับทราบ', rid:r.id, detail:`${fmtD(it.date)} คาบ ${it.p} ${it.cls}`}); } }
+  function approve(r, hours){ r.status='approved'; r.approvedAt = new Date(new Date(r.createdAt).getTime()+hours*36e5).toISOString(); r.approvedBy='หัวหน้ากลุ่มบริหารงานวิชาการ';
+    r.history.push({at:r.approvedAt, by:r.approvedBy, act:'เห็นชอบ — การจัดสอนแทนสมบูรณ์', note:''});
+    S.log.push({at:r.approvedAt, by:r.approvedBy, act:'เห็นชอบ', rid:r.id, detail:''}); }
+
+  const d_1 = nthSchool(-1), d0 = nthSchool(0);
+  if (d_1){ const a = make('personal',[d_1],{reason:'ทำธุระส่วนตัว (ติดต่อราชการที่อำเภอ)', created:stamp(addD(d_1,-5),14,5)}); ackAll(a,3); approve(a,26); }
+  // ลาป่วยวันนี้ — หัวหน้ากลุ่มสาระฯ จัดให้
+  { const t = pickT(d0, used); const h = S.settings.deptHeads[gOf(t)]; const head = (h!=null && h!==t) ? h : t;
+    const b = make('sick',[d0],{teacher:t, arrangedBy:head, reason:'ไข้หวัด มีใบรับรองแพทย์', created:stamp(d0,6,45)});
+    ackAll(b,0.6); approve(b,2.2); S.demo.deptHead = head; S.demo.sickTeacher = t; }
+  { const r = make('official',[nthSchool(2)],{methods:['swapF','swapT','sub','sub','sub'], reason:'อบรมเชิงปฏิบัติการ สพม.สุราษฎร์ธานี ชุมพร', created:stamp(d0,9,10), file:'หนังสือขอความอนุเคราะห์.pdf'}); ackAll(r,2); }
+  { const r = make('mission',[nthSchool(1)],{reason:'นำนักเรียนแข่งขันทักษะวิชาการ', created:stamp(addD(d0,-1),16,30)});
+    const it = r.items.find(i=>i.ack==='pending'); if (it){ it.ack='declined'; it.declAt=stamp(d0,7,50); it.declNote='ติดคุมสอบกลางภาค ม.6 คาบนี้';
+      r.history.push({at:it.declAt, by:tn(it.sub), act:'ขอเปลี่ยน', note:it.declNote}); S.log.push({at:it.declAt, by:tn(it.sub), act:'ขอเปลี่ยน', rid:r.id, detail:it.declNote}); }
+    r.items.filter(i=>i.ack==='pending').slice(0,-1).forEach(i=>{ i.ack='ack'; i.ackAt=stamp(d0,8,15); }); S.demo.fixOwner = r.teacher; }
+  { const r = make('personal',[nthSchool(3)],{reason:'งานบวชบุตรชาย', created:stamp(d0,10,5)});
+    const firstSub = r.items.find(i=>i.method==='sub'); S.demo.teacher = firstSub ? firstSub.sub : 0;
+    // ให้ครูตัวอย่างได้รับทราบไปบางคาบ
+    r.items.filter(i=>i.ack==='pending' && i.sub!==S.demo.teacher).slice(0,1).forEach(i=>{ i.ack='ack'; i.ackAt=stamp(d0,11,0); }); }
+  { const r = make('official',[nthSchool(5), nthSchool(6)],{reason:'ประชุมสัมมนาครูฟิสิกส์ระดับภูมิภาค', created:stamp(addD(d0,-2),13,40), file:'คำสั่งไปราชการ_123-2569.pdf', methods:['sub','swapT','sub']}); ackAll(r,5); approve(r,30); }
+  { const r = make('personal',[nthSchool(9)],{reason:'พาบิดาไปพบแพทย์ตามนัด', created:stamp(d0,12,30), skip:1}); ackAll(r,1); }
+  S.log.sort((a,b)=>b.at.localeCompare(a.at));
+  save();
+}
+
+/* ================================================================
+   UI: shell
+   ================================================================ */
+const ICON = {
+  home:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+  plus:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>',
+  inbox:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 13h4l2 3h4l2-3h4M5 5h14l1 8v6H4v-6z"/></svg>',
+  list:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+  check:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>',
+  cal:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  chart:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  log:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  gear:'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  bell:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
+  print:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>',
+  dl:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
+};
+function myPending(){ if (!ME || ME.ti==null) return [];
+  const out=[]; for (const r of S.requests){ if (r.status==='cancelled') continue;
+    for (const it of r.items) if (it.ack==='pending' && ackWho(it)===ME.ti) out.push({r,it}); } return out; }
+function myFix(){ return S.requests.filter(r => canArrange(r) && (r.teacher===ME.ti || r.arrangedBy===ME.ti) && ['fix','returned'].includes(rst(r))); }
+function notifications(){
+  const n=[];
+  const mp = myPending(); if (mp.length) n.push({t:`มีคาบสอนแทน/สลับคาบ รอคุณรับทราบ ${mp.length} คาบ`, go:'inbox'});
+  myFix().forEach(r => n.push({t:`${r.id} ${rst(r)==='fix'?'มีผู้ขอเปลี่ยน ต้องจัดใหม่':'ถูกส่งกลับให้แก้ไข'}`, rid:r.id}));
+  if (isAcad()){ const c=S.requests.filter(r=>rst(r)==='review').length; if (c) n.push({t:`คำขอรอเห็นชอบ ${c} รายการ`, go:'approve'}); }
+  return n;
+}
+function tabsFor(){
+  const t=[['home','หน้าหลัก','home'],['new','จัดสอนแทน','plus']];
+  if (ME.ti!=null) t.push(['inbox','รอฉันรับทราบ','inbox', myPending().length]);
+  t.push(['list','รายการจัดสอนแทน','list']);
+  if (isAcad()) t.push(['approve','เห็นชอบ','check', S.requests.filter(r=>rst(r)==='review').length]);
+  t.push(['board','ตารางสอนแทนรายวัน','cal'],['stats','สถิติ','chart']);
+  if (isAcad()) t.push(['log','บันทึกระบบ','log'],['settings','ตั้งค่า','gear']);
+  return t;
+}
+function roleText(){ const r=[]; if (ME.roles.includes('acad')) r.push('หัวหน้ากลุ่มบริหารงานวิชาการ');
+  if (ME.roles.includes('dept')) r.push('หัวหน้ากลุ่มสาระฯ '+headGroups(ME.ti).map(g=>GSHORT[g]).join(', '));
+  if (ME.ti!=null && !r.length) r.push('ครู · '+D.groups[gOf(ME.ti)]); return r.join(' · '); }
+
+function render(){
+  if (!ME) return renderLogin();
+  const n = notifications();
+  const views = {home:vHome, new:vNew, inbox:vInbox, list:vList, approve:vApprove, board:vBoard, stats:vStats, log:vLog, settings:vSettings};
+  if (!views[VIEW]) VIEW='home';
+  $('#app').innerHTML = `
+  <header class="top"><div class="top-in">
+    ${D.logo?`<img class="logo" src="${D.logo}" alt="">`:''}
+    <div class="brand"><h1>ระบบจัดสอนแทน</h1><div class="sub">${esc(D.school)} · ภาคเรียนที่ 2/2569</div></div>
+    <div class="top-r">
+      <button class="bell" data-act="bell" aria-label="การแจ้งเตือน">${ICON.bell}${n.length?`<span class="dot">${n.length}</span>`:''}</button>
+      <button class="me" data-act="logout" title="ออกจากระบบ / สลับผู้ใช้"><span class="av">${esc(ME.ti!=null?initials(ME.ti):'ว')}</span>
+        <span style="min-width:0;text-align:left"><div class="nm">${esc(ME.name)}</div><div class="rl">${esc(roleText())}</div></span></button>
+    </div></div></header>
+  <div class="demo-bar"><div class="in"><b>โหมดทดลอง (Mockup)</b><span class="muted">ใช้ตารางสอนจริง 2/2569 · ข้อมูลการลา/สอนแทนเป็นตัวอย่าง เก็บในเบราว์เซอร์นี้เท่านั้น</span>
+    <span class="sp"></span><button class="btn sm" data-act="logout">สลับผู้ใช้</button><button class="btn sm" data-act="reset">ล้างข้อมูลตัวอย่าง</button></div></div>
+  <nav class="tabs"><div class="tabs-in">${tabsFor().map(([k,l,i,c])=>`<button class="tab ${VIEW===k?'on':''}" data-go="${k}">${ICON[i]}${l}${c?`<span class="c">${c}</span>`:''}</button>`).join('')}</div></nav>
+  <main id="main">${views[VIEW]()}</main>`;
+}
+
+/* ---------- login ---------- */
+function renderLogin(){
+  const opts = D.teachers.map((t,ti)=>({ti,n:t.n})).sort((a,b)=>a.n.localeCompare(b.n,'th'));
+  const dt = S.demo.teacher, dh = S.demo.deptHead, fo = S.demo.fixOwner;
+  $('#app').innerHTML = `<div class="login"><div class="box">
+    <div class="head">${D.logo?`<img src="${D.logo}" alt="">`:''}<h1>ระบบจัดสอนแทน</h1><div class="small" style="opacity:.85">${esc(D.school)}</div></div>
+    <div class="card"><div class="card-b">
+      <h3 style="font-size:17px;margin-bottom:4px">เข้าสู่ระบบด้วยบัญชี e-Score</h3>
+      <p class="small muted" style="margin:0 0 12px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ e-Score ของโรงเรียน</p>
+      <div class="field"><label class="f">ชื่อผู้ใช้ (e-Score)</label><input type="text" id="lu" placeholder="เช่น รหัสครู หรือ อีเมลโรงเรียน" autocomplete="username"></div>
+      <div class="field"><label class="f">รหัสผ่าน</label><input type="password" id="lp" placeholder="••••••••" autocomplete="current-password"></div>
+      <div class="field"><label class="f">ทดลองเข้าในนามครู (เฉพาะ mockup)</label>
+        <select id="lt">${opts.map(o=>`<option value="${o.ti}" ${o.ti===dt?'selected':''}>${esc(o.n)} — ${GSHORT[gOf(o.ti)]}</option>`).join('')}</select></div>
+      <button class="btn pri" style="width:100%;justify-content:center;padding:10px" data-act="login">เข้าสู่ระบบ</button>
+      <hr class="sep"><div class="small muted" style="margin-bottom:8px">หรือเลือกบทบาทตัวอย่าง</div>
+      <div class="quick">
+        <button data-act="qlogin" data-ti="${dt}"><b>ครูผู้สอน</b><span>${esc(tn(dt))} · มีคาบสอนแทนรอรับทราบ</span></button>
+        <button data-act="qlogin" data-ti="${fo}"><b>ครูที่ต้องจัดสอนแทนใหม่</b><span>${esc(tn(fo))} · มีผู้ขอเปลี่ยน 1 คาบ</span></button>
+        <button data-act="qlogin" data-ti="${dh}"><b>หัวหน้ากลุ่มสาระฯ</b><span>${esc(tn(dh))} · จัดสอนแทนกรณีลาป่วยให้ครูในกลุ่ม</span></button>
+        <button data-act="qacad"><b>หัวหน้ากลุ่มบริหารงานวิชาการ</b><span>เห็นชอบการจัดสอนแทน · ดูสถิติ · ตั้งค่า</span></button>
+      </div>
+    </div></div></div></div>`;
+}
+
+/* ---------- home ---------- */
+function myDayStrip(ti, d){
+  const O = occupancy(null), w = wd(d);
+  let h=''; for (let p=1;p<=9;p++){
+    const e=TAT[ti][w][p], o=O.occ[K(ti,d,p)], L=O.leave[ti+'|'+d], fr=O.freed[K(ti,d,p)];
+    let cls='slot', body='<span class="muted">ว่าง</span>';
+    if (L && e){ cls+=' off'; body=`<span class="muted">${esc(e.code)} ${esc(e.cls)}</span><br><span class="tiny">${TYPES[L.type].label}</span>`; }
+    else if (o){ cls+=' subst'; body=`<b style="color:var(--warn)">${o.t}</b>${esc(o.cls)}<br><span class="tiny">แทน ${esc(sn(o.r.teacher))}</span>`; }
+    else if (e && !fr){ cls+= NT.has(e.code)?' nt':' teach'; body=`${esc(e.code)}<br><span class="tiny">${esc(e.cls)}</span>`; }
+    else if (fr){ cls+=' off'; body='<span class="tiny">สลับออกแล้ว</span>'; }
+    h+=`<div class="${cls}"><b>คาบ ${p} · ${perT(p).split('-')[0]}</b>${body}</div>`; }
+  return `<div class="strip">${h}</div>`;
+}
+function vHome(){
+  const d0 = nthSchool(0); const onDay = S.requests.filter(r=>r.status!=='cancelled' && r.dates.includes(d0));
+  const itemsToday = onDay.flatMap(r=>coverItems(r).filter(i=>i.date===d0));
+  const pend = myPending(), fixes = myFix();
+  const mine = S.requests.filter(r=>ME.ti!=null && (r.teacher===ME.ti||r.arrangedBy===ME.ti)).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,5);
+  const review = S.requests.filter(r=>rst(r)==='review');
+  const todo = [
+    ...pend.map(({r,it})=>`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)"><span class="chip s-ack">รอรับทราบ</span><span><b>${fmtD(it.date)} คาบ ${it.p}</b> ${esc(it.cls)} · ${esc(it.code)} — ${METHODS[it.method].short}ให้ ${esc(sn(r.teacher))}</span><span class="sp"></span><button class="btn sm ok" data-act="ack" data-rid="${r.id}" data-iid="${it.id}">รับทราบ</button></div>`),
+    ...fixes.map(r=>`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">${stChip(rst(r))}<span><b>${r.id}</b> ${tyChip(r.type)} ${esc(r.dates.map(fmtD).join(', '))}</span><span class="sp"></span><button class="btn sm" data-act="open" data-rid="${r.id}">จัดใหม่</button></div>`),
+    ...(isAcad()&&review.length?[`<div class="row" style="padding:8px 0"><span class="chip s-review">รอเห็นชอบ</span><span>คำขอที่ผู้ถูกจัดรับทราบครบแล้ว <b>${review.length}</b> รายการ</span><span class="sp"></span><button class="btn sm pri" data-go="approve">ไปหน้าเห็นชอบ</button></div>`]:[]),
+  ];
+  return `
+  <div class="page-h"><div><div class="muted small">${fmtL(TODAY)}</div><h2>สวัสดี ${esc(ME.ti!=null?sn(ME.ti):ME.name)}</h2></div>
+    <div class="r"><button class="btn gold" data-go="new">${ICON.plus} แจ้งลา / จัดสอนแทน</button></div></div>
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card kpi"><div class="v num">${onDay.length}</div><div class="l">ครูลา/ไปราชการ ${d0===TODAY?'วันนี้':fmtD(d0)}</div></div>
+    <div class="card kpi"><div class="v num">${itemsToday.length}</div><div class="l">คาบที่จัดสอนแทน ${d0===TODAY?'วันนี้':fmtD(d0)}</div></div>
+    <div class="card kpi" style="border-left-color:var(--warn)"><div class="v num">${pend.length}</div><div class="l">รอฉันรับทราบ</div></div>
+    <div class="card kpi" style="border-left-color:var(--info)"><div class="v num">${isAcad()?review.length:S.requests.filter(r=>r.teacher===ME.ti&&['ack','review','fix'].includes(rst(r))).length}</div><div class="l">${isAcad()?'รอเห็นชอบ':'คำขอของฉันที่ยังไม่สมบูรณ์'}</div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><div class="card-h"><h3>สิ่งที่ต้องทำ</h3></div><div class="card-b">${todo.length?todo.join(''):'<div class="empty">ไม่มีงานค้าง 🎉</div>'}</div></div>
+    <div class="card"><div class="card-h"><h3>ตารางสอนแทน ${d0===TODAY?'วันนี้':fmtD(d0)}</h3><span class="sp"></span><button class="btn sm" data-go="board">ดูทั้งหมด</button></div>
+      <div class="card-b" style="padding:0">${boardTable(d0, 6)}</div></div>
+  </div>
+  ${ME.ti!=null?`<div class="card" style="margin-top:14px"><div class="card-h"><h3>ตารางสอนของฉัน ${fmtD(d0)}</h3><span class="muted small">รวมคาบสอนแทน/สลับคาบแล้ว</span></div><div class="card-b">${myDayStrip(ME.ti,d0)}</div></div>`:''}
+  ${mine.length?`<div class="card" style="margin-top:14px"><div class="card-h"><h3>คำขอล่าสุดของฉัน</h3></div><div class="tbl-wrap">${reqTable(mine)}</div></div>`:''}`;
+}
+
+/* ---------- request table ---------- */
+const arrLabel = r => r.arrangedBy===r.teacher ? 'ตนเอง' : r.arrangedBy==null ? 'หน.วิชาการ' : esc(sn(r.arrangedBy))+'<div class="tiny muted">หน.กลุ่มสาระฯ</div>';
+function reqTable(list, checkable){
+  if (!list.length) return '<div class="empty">ไม่มีรายการ</div>';
+  return `<table class="t"><thead><tr>${checkable?'<th></th>':''}<th>เลขที่</th><th>ครู</th><th>กรณี</th><th>วันที่</th><th>คาบ</th><th>รับทราบ</th><th>สถานะ</th><th>จัดโดย</th></tr></thead><tbody>
+  ${list.map(r=>{ const ci=coverItems(r), need=ci.filter(ackNeeded), ok=need.filter(i=>i.ack==='ack').length; const st=rst(r);
+    return `<tr class="click" data-act="open" data-rid="${r.id}">${checkable?`<td data-stop="1"><input type="checkbox" class="apck" value="${r.id}" ${st==='review'?'':'disabled'}></td>`:''}
+      <td class="nowrap"><b>${r.id}</b><div class="tiny muted">${fmtDT(r.createdAt)}</div></td>
+      <td>${esc(sn(r.teacher))}<div>${gtag(gOf(r.teacher))}</div></td><td>${tyChip(r.type)}</td>
+      <td class="nowrap">${r.dates.map(fmtD).join('<br>')}</td><td class="num">${ci.length}</td>
+      <td class="num nowrap">${need.length?`${ok}/${need.length}`:'—'}</td><td>${stChip(st)}</td>
+      <td class="small">${arrLabel(r)}</td></tr>`; }).join('')}
+  </tbody></table>`;
+}
+
+/* ================================================================
+   หน้า: แจ้งลา / จัดสอนแทน
+   ================================================================ */
+function newDraft(){
+  const self = ME.ti!=null ? ME.ti : 0;
+  W = {editId:null, req:{id:'(ร่าง)', type:null, teacher:self, arrangedBy:ME.ti, dates:[], reason:'', status:'open', items:[], history:[], createdAt:null, file:null}, start:'', end:''};
+}
+function teacherChoices(){
+  if (isAcad()) return D.teachers.map((t,ti)=>ti);
+  const s = new Set([ME.ti]); headGroups(ME.ti).forEach(g => D.teachers.forEach((t,ti)=>{ if (t.g===g) s.add(ti); }));
+  return [...s];
+}
+function minStart(type){ return type==='sick' || isAcad() ? TODAY : addD(TODAY, S.settings.leadDays); }
+function regen(){
+  const r=W.req; r.dates=[]; r.items=[]; UI.cache={}; UI.tab={}; UI.open=null; UI.more={};
+  if (!r.type || !W.start) return;
+  if (!W.end || W.end<W.start) W.end=W.start;
+  if (W.start<minStart(r.type) || W.end>maxDate()) return;
+  r.dates = schoolDays(W.start, W.end); r.items = buildItems(r.teacher, r.dates);
+  UI.open = (r.items.find(i=>!i.method)||{}).id || null;
+}
+function vNew(){
+  if (!W) newDraft();
+  const r=W.req, choices=teacherChoices(), other = r.teacher!==ME.ti;
+  const msErr = r.type && W.start && W.start<minStart(r.type) ? `กรณี${TYPES[r.type].label} ต้องจัดล่วงหน้าอย่างน้อย ${S.settings.leadDays} วัน (เริ่มได้ ${fmtD(minStart(r.type))})` :
+                W.end && W.end>maxDate() ? `จัดล่วงหน้าได้ไม่เกิน ${S.settings.maxAhead} วัน (ถึง ${fmtD(maxDate())})` : '';
+  const nonSchool = W.start && r.type && !msErr && !r.dates.length;
+  const ci = coverItems(r), done = ci.filter(i=>i.method).length;
+  const conflictsOwn = ownDutyConflicts(r);
+  return `
+  <div class="page-h"><div><div class="muted small">${W.editId?'แก้ไขและส่งใหม่ · '+W.editId:'สร้างคำขอใหม่'}</div><h2>แจ้งลา / จัดสอนแทน</h2></div>
+    <div class="r"><div class="steps">${stepper(r.type&&r.dates.length? (done===ci.length&&ci.length?2:1) :0)}</div></div></div>
+  <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>1. ข้อมูลการลา</h3></div><div class="card-b">
+    <div class="grid g3">
+      <div class="field"><label class="f">ครูผู้ลา / ผู้ไม่อยู่</label>
+        <select data-w="teacher" ${choices.length<2||W.editId?'disabled':''}>${choices.map(ti=>`<option value="${ti}" ${ti===r.teacher?'selected':''}>${esc(tn(ti))}${ti===ME.ti?' (ตนเอง)':''}</option>`).join('')}</select>
+        ${other?'<div class="tiny muted" style="margin-top:4px">จัดให้ครูในกลุ่มสาระฯ ได้เฉพาะกรณีลาป่วย</div>':''}</div>
+      <div class="field"><label class="f">ตั้งแต่วันที่</label><input type="date" data-w="start" value="${W.start}" min="${r.type?minStart(r.type):TODAY}" max="${maxDate()}"></div>
+      <div class="field"><label class="f">ถึงวันที่</label><input type="date" data-w="end" value="${W.end}" min="${W.start||TODAY}" max="${maxDate()}"></div>
+    </div>
+    <label class="f">กรณี</label>
+    <div class="types">${Object.entries(TYPES).map(([k,t])=>`<button class="type ${r.type===k?'on':''}" data-act="wtype" data-k="${k}" ${other&&!t.sick&&!isAcad()?'disabled':''}>
+      <div class="h"><i style="background:var(--t-${k})"></i>${t.label}</div><p>${t.rule}</p></button>`).join('')}</div>
+    <div class="grid g2" style="margin-top:12px">
+      <div class="field"><label class="f">เหตุผล / รายละเอียด</label><textarea data-w="reason" placeholder="เช่น ไปราชการตามคำสั่งที่ ..., ลากิจเพื่อ ...">${esc(r.reason)}</textarea></div>
+      <div class="field"><label class="f">เอกสารแนบ (ถ้ามี)</label><input type="text" data-w="file" value="${esc(r.file||'')}" placeholder="ชื่อไฟล์ เช่น คำสั่งไปราชการ.pdf (ระบบจริงเป็นปุ่มอัปโหลด)">
+        <div class="note" style="margin-top:8px">ระบบดึงตารางสอนของวันที่เลือกให้อัตโนมัติ · จัดล่วงหน้าได้ถึง <b>${fmtD(maxDate())}</b> · วันหยุด/นอกภาคเรียนไม่นับ</div></div>
+    </div>
+    ${msErr?`<div class="note bad">${msErr}</div>`:''}${nonSchool?'<div class="note warn">ช่วงวันที่เลือกไม่มีวันเรียน (วันหยุด/เสาร์-อาทิตย์)</div>':''}
+  </div></div>
+  ${r.dates.length?`
+  <div class="card"><div class="card-h"><h3>2. จัดสอนแทนรายคาบ</h3><span class="muted small">${esc(tn(r.teacher))} · ${r.dates.length} วัน · ต้องจัด ${ci.length} คาบ</span>
+    <span class="sp"></span><button class="btn sm" data-act="autofill" title="เลือกครูอันดับ 1 ให้ทุกคาบที่ยังไม่ได้จัด">เติมอัตโนมัติ (อันดับ 1)</button></div>
+    <div class="card-b">
+      ${conflictsOwn.length?`<div class="note warn" style="margin-bottom:10px"><b>ข้อควรระวัง:</b> ${esc(tn(r.teacher))} มีภาระสอนแทน/สลับคาบให้ผู้อื่นในวันที่ลา ${conflictsOwn.length} คาบ (${conflictsOwn.map(x=>`${fmtD(x.it.date)} คาบ ${x.it.p} ${x.it.cls} ของ ${sn(x.r.teacher)}`).join(', ')}) — ควรแจ้งเจ้าของคำขอให้จัดใหม่</div>`:''}
+      ${r.items.filter(i=>NT.has(i.code)).length?`<div class="small muted" style="margin-bottom:10px">ไม่ต้องจัดสอนแทน (โฮมรูม/ประชุม/PLC/กิจกรรมพร้อมกันทั้งโรงเรียน — แจ้งครูร่วมกิจกรรมดูแล): ${r.items.filter(i=>NT.has(i.code)).map(i=>`${fmtD(i.date)} คาบ ${i.p} ${esc(i.subj)}`).join(' · ')}</div>`:''}
+      ${ci.length?ci.map(it=>itemEditor(r,it)).join(''):'<div class="empty">ไม่มีคาบสอนในวันที่เลือก</div>'}
+    </div>
+    <div class="sticky-foot"><div class="prog"><i style="width:${ci.length?done/ci.length*100:0}%"></i></div><span class="small"><b>${done}/${ci.length}</b> คาบ</span>
+      <span class="sp"></span><button class="btn" data-act="wcancel">ยกเลิก</button>
+      <button class="btn gold" data-act="wsubmit" ${done===ci.length&&r.type?'':'disabled'}>ตรวจสอบและส่ง</button></div>
+  </div>`:''}`;
+}
+function stepper(cur){ const s=['ข้อมูลการลา','จัดรายคาบ','ส่ง → รับทราบ → เห็นชอบ'];
+  return s.map((t,i)=>`<div class="step ${i<cur?'done':i===cur?'cur':''}"><span class="b">${i<cur?'✓':i+1}</span>${t}</div>`).join(''); }
+function ownDutyConflicts(r){ const out=[];
+  for (const q of S.requests){ if (q.status==='cancelled' || q.id===W?.editId) continue;
+    for (const it of q.items){ if (it.ack==='declined') continue;
+      if (ackWho(it)===r.teacher && r.dates.includes(it.date)) out.push({r:q,it});
+      if ((it.method==='swapT'||it.method==='swapF') && q.teacher===r.teacher && r.dates.includes(it.swap.date)) out.push({r:q,it}); } }
+  return out; }
+
+function pickedText(it){
+  if (it.method==='sub') return `<b>${esc(sn(it.sub))}</b> ${gtag(gOf(it.sub))}`;
+  if (it.method==='swapT') return `สลับกับ <b>${esc(sn(it.swap.t))}</b> · คุณไปสอน ${fmtD(it.swap.date)} คาบ ${it.swap.p}`;
+  if (it.method==='swapF') return `ย้ายไปสอน <b>${fmtD(it.swap.date)} คาบ ${it.swap.p}</b>`;
+  if (it.method==='none') return 'ครูร่วมสอนดูแล';
+  return '<span style="color:var(--bad)">ยังไม่ได้จัด</span>';
+}
+function loadBar(l){ let h=''; for (let i=0;i<Math.max(6,l.total);i++) h+=`<i class="${i<l.base?'f':i<l.total?'s':''}"></i>`; return `<span class="load" title="สอนตามตาราง ${l.base} + สอนแทน ${l.extra}">${h}</span>`; }
+function itemEditor(r, it){
+  const open = UI.open===it.id, tab = UI.tab[it.id] || (it.method && it.method!=='none' ? it.method : 'sub');
+  const head = `<div class="item-h" data-act="iopen" data-iid="${it.id}">
+    <span class="per">${fmtD(it.date)} · คาบ ${it.p}</span><span class="tiny muted">${perT(it.p)}</span>
+    <span class="what">${esc(it.code)} ${esc(it.subj)}</span><span class="chip s-na">${esc(it.cls)}</span>
+    <span class="pick">${pickedText(it)}</span></div>`;
+  if (!open) return `<div class="item ${it.method?'done':''} ${it.ack==='declined'?'need':''}">${head}</div>`;
+  const co = coTeachers(r,it);
+  let body = `<div class="row" style="margin-bottom:10px"><div class="seg">
+    ${['sub','swapT','swapF'].map(m=>`<button class="${tab===m?'on':''}" data-act="itab" data-iid="${it.id}" data-m="${m}">${METHODS[m].label}</button>`).join('')}
+    ${co.length?`<button class="${tab==='none'?'on':''}" data-act="itab" data-iid="${it.id}" data-m="none">ครูร่วมสอนดูแล</button>`:''}</div>
+    <span class="tiny muted">ห้อง ${esc(it.room)}</span></div>`;
+  if (tab==='sub'){
+    const c = candSub(r,it); UI.cache[it.id]=c; const lim = UI.more[it.id] ? c.avail.length : 6; const g=gOf(r.teacher);
+    const firstOther = c.avail.findIndex(a=>!a.same);
+    body += `<div class="small muted" style="margin-bottom:6px">ครูที่ว่างจริง ${c.avail.length} คน · เรียง <b>กลุ่มสาระเดียวกันก่อน</b> แล้วตาม <b>จำนวนคาบสอนวันนั้นน้อย→มาก</b> (เท่ากันดูจำนวนสอนแทนสะสม)</div>
+      <div class="cand-h"><span>#</span><span>ครู</span><span>คาบวันนั้น</span><span class="hm">สอนแทนสะสม</span><span class="hm"></span></div>
+      ${c.avail.slice(0,lim).map((a,i)=>`${i===firstOther&&i>0?`<div class="tiny muted" style="padding:6px 10px;border-top:1px dashed var(--line)">ครูต่างกลุ่มสาระ</div>`:''}
+      <div class="cand ${it.method==='sub'&&it.sub===a.ti?'sel':''}" data-act="pick" data-iid="${it.id}" data-ti="${a.ti}">
+        <span class="rk">${i+1}</span><span class="nm">${esc(tn(a.ti))} <small>${gtag(gOf(a.ti))} ${a.duty?`<span style="color:var(--warn)">⚠ ${esc(a.duty)}</span>`:''}</small></span>
+        <span class="row" style="gap:6px">${loadBar(a.load)}<b class="num">${a.load.total}</b></span><span class="num hm">${a.cum}</span>
+        <span class="hm">${a.same?'<span class="chip s-approved">กลุ่มเดียวกัน</span>':''}</span></div>`).join('')}
+      ${!c.avail.length?`<div class="note warn">ไม่มีครูว่างจริงในคาบนี้ — ลองใช้ “สลับคาบกับครูอื่น” หรือ “สลับคาบว่าง”</div>`:''}
+      ${c.avail.length>6?`<button class="btn sm" style="margin-top:6px" data-act="more" data-iid="${it.id}">${UI.more[it.id]?'แสดงน้อยลง':'แสดงทั้งหมด '+c.avail.length+' คน'}</button>`:''}
+      ${c.blocked.length?`<details class="blocked"><summary>ว่างตามตารางปกติ แต่ไม่ว่างจริง ${c.blocked.length} คน (ตรวจจากข้อมูลการจัดสอนแทน/การลา)</summary><ul>${c.blocked.map(b=>`<li>${esc(tn(b.ti))} — ${esc(b.why)}</li>`).join('')}</ul></details>`:''}`;
+  } else if (tab==='swapT'){
+    const c = candSwapT(r,it); UI.cache[it.id+'T']=c;
+    body += c.err ? `<div class="note warn">${c.err}</div>` : `<div class="small muted" style="margin-bottom:6px">ครูที่สอนห้อง <b>${esc(it.cls)}</b> และสลับกันได้ (ทั้งสองฝ่ายว่างจริง) — ครูอีกฝ่ายต้องกดรับทราบ</div>
+      ${c.list.length?c.list.slice(0,UI.more[it.id+'T']?99:8).map((o,i)=>`<div class="opt ${it.method==='swapT'&&it.swap.t===o.t&&it.swap.date===o.date&&it.swap.p===o.p?'sel':''}" data-act="pickT" data-iid="${it.id}" data-k="${i}">
+        <span class="when">${fmtD(o.date)} คาบ ${o.p}</span><span><b>${esc(tn(o.t))}</b> ${gtag(gOf(o.t))}<br><span class="small muted">${esc(sn(o.t))} มาสอนคาบนี้ (${fmtD(it.date)} คาบ ${it.p}) · ${esc(sn(r.teacher))} ไปสอน ${esc(o.code)} ${esc(it.cls)} แทนใน ${fmtD(o.date)} คาบ ${o.p}</span></span></div>`).join('')
+        + (c.list.length>8?`<button class="btn sm" data-act="more" data-iid="${it.id}T">${UI.more[it.id+'T']?'แสดงน้อยลง':'แสดงทั้งหมด '+c.list.length+' ตัวเลือก'}</button>`:'') : '<div class="empty">ไม่พบคาบที่สลับได้ในช่วง 1 สัปดาห์ก่อน – 2 สัปดาห์หลัง</div>'}`;
+  } else if (tab==='swapF'){
+    const c = candSwapF(r,it); UI.cache[it.id+'F']=c;
+    body += c.err ? `<div class="note warn">${c.err}</div>` : `<div class="small muted" style="margin-bottom:6px">คาบที่ <b>ห้อง ${esc(it.cls)} ว่าง</b> และ <b>${esc(sn(r.teacher))} ว่าง</b> — ย้ายไปสอนคาบนั้นแทน (ไม่ต้องใช้ครูสอนแทน)</div>
+      <div class="row">${c.list.length?c.list.slice(0,UI.more[it.id+'F']?99:12).map((o,i)=>`<button class="btn sm ${it.method==='swapF'&&it.swap.date===o.date&&it.swap.p===o.p?'gold':''}" data-act="pickF" data-iid="${it.id}" data-k="${i}">${fmtD(o.date)} คาบ ${o.p}</button>`).join('')
+        + (c.list.length>12?`<button class="btn sm" data-act="more" data-iid="${it.id}F">${UI.more[it.id+'F']?'น้อยลง':'ทั้งหมด '+c.list.length}</button>`:'') : '<div class="empty">ไม่พบคาบว่างที่ตรงกัน</div>'}</div>`;
+  } else if (tab==='none'){
+    body += `<div class="note">คาบนี้มีครูร่วมสอน: <b>${co.map(sn).map(esc).join(', ')}</b> ซึ่งไม่ได้ลา — เลือกให้ครูร่วมสอนดูแลแทนได้</div>
+      <button class="btn sm ${it.method==='none'?'gold':''}" style="margin-top:8px" data-act="pickN" data-iid="${it.id}">ให้ครูร่วมสอนดูแล</button>`;
+  }
+  return `<div class="item ${it.method?'done':''} ${it.ack==='declined'?'need':''}">${head}<div class="item-b">${body}</div></div>`;
+}
+function findItem(iid){ const r = UI.fix ? UI.fix.req : W.req; return [r, r.items.find(i=>i.id===iid)]; }
+function afterPick(r, it){ it.ack = ackNeeded(it) ? 'pending' : null; delete it.declNote;
+  const next = coverItems(r).find(i=>!i.method || i.ack==='declined'); UI.open = UI.fix ? it.id : (next ? next.id : null); rerenderEditor(); }
+function rerenderEditor(){ if (UI.fix) renderFixModal(); else render(); }
+
+function confirmSubmit(){
+  const r=W.req;
+  const rows = coverItems(r).map(it=>`<tr><td class="nowrap">${fmtD(it.date)} คาบ ${it.p}</td><td>${esc(it.cls)} · ${esc(it.code)}</td><td>${METHODS[it.method].label}</td><td>${pickedText(it)}</td></tr>`).join('');
+  modal(`<div class="modal"><div class="modal-h"><h3>ตรวจสอบก่อนส่ง</h3><button class="x" data-act="close">×</button></div><div class="modal-b">
+    <div class="row" style="margin-bottom:10px">${tyChip(r.type)}<b>${esc(tn(r.teacher))}</b><span class="muted">${r.dates.map(fmtD).join(', ')}</span></div>
+    <div class="tbl-wrap"><table class="t"><thead><tr><th>วัน/คาบ</th><th>ห้อง/วิชา</th><th>วิธีจัด</th><th>ผู้รับผิดชอบ</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="note" style="margin-top:12px">เมื่อส่งแล้ว ระบบแจ้งครูที่ถูกจัด <b>${new Set(coverItems(r).map(ackWho).filter(x=>x!=null)).size} คน</b> ให้กดรับทราบ → เมื่อรับทราบครบ ส่งให้หัวหน้ากลุ่มบริหารงานวิชาการเห็นชอบ → <b>สมบูรณ์</b></div>
+  </div><div class="modal-f"><button class="btn" data-act="close">กลับไปแก้ไข</button><button class="btn gold" data-act="wsend">ยืนยันส่ง</button></div></div>`);
+}
+function doSubmit(){
+  const r = W.req; const now = new Date().toISOString();
+  if (W.editId){
+    const old = S.requests.find(x=>x.id===W.editId);
+    for (const it of r.items){ const o = old.items.find(x=>x.id===it.id);
+      if (o && o.method===it.method && JSON.stringify([o.sub,o.swap])===JSON.stringify([it.sub,it.swap]) && o.ack==='ack') { it.ack='ack'; it.ackAt=o.ackAt; } }
+    Object.assign(old, {reason:r.reason, file:r.file, items:r.items, status:'open'});
+    hist(old,'แก้ไขและส่งใหม่'); log('แก้ไขและส่งใหม่', old.id, ''); save(); W=null; closeModal(); toast('ส่งใหม่เรียบร้อย'); openReq(old.id); VIEW='list'; render(); return;
+  }
+  S.seq++; r.id='ST69-'+String(S.seq).padStart(4,'0'); r.createdAt=now; r.arrangedBy=ME.ti; r.history=[];
+  hist(r,'สร้างคำขอและจัดสอนแทน',`${TYPES[r.type].label} ${r.dates.length} วัน ${coverItems(r).length} คาบ`);
+  S.requests.push(r);
+  log('สร้างคำขอ', r.id, `${tn(r.teacher)} · ${TYPES[r.type].label} · ${r.dates.map(fmtD).join(', ')}`);
+  save(); W=null; closeModal(); toast('ส่งคำขอแล้ว — แจ้งครูที่ถูกจัดให้รับทราบ'); VIEW='list'; UI.listTab='mine'; render(); openReq(r.id);
+}
+
+/* ---------- inbox ---------- */
+function vInbox(){
+  const pend = myPending();
+  const upcoming = []; for (const r of S.requests){ if (r.status==='cancelled') continue;
+    for (const it of r.items) if (it.ack==='ack' && ackWho(it)===ME.ti && it.date>=TODAY) upcoming.push({r,it}); }
+  upcoming.sort((a,b)=>(a.it.date+a.it.p).localeCompare(b.it.date+b.it.p));
+  const card = ({r,it},act) => `<div class="card" style="margin-bottom:10px"><div class="card-b">
+    <div class="row"><span class="per" style="background:var(--navy2);color:#fff;border-radius:8px;padding:3px 9px;font-weight:700;font-size:13px">${fmtD(it.date)} · คาบ ${it.p}</span>
+      <span class="tiny muted">${perT(it.p)}</span><b>${esc(it.cls)}</b><span>${esc(it.code)} ${esc(it.subj)}</span>${tyChip(r.type)}</div>
+    <div style="margin-top:8px">${it.method==='sub'?`<b>สอนแทน</b> ${esc(tn(r.teacher))} ${gtag(gOf(r.teacher))} · ห้อง ${esc(it.room)}`
+      : `<b>สลับคาบ</b> กับ ${esc(tn(r.teacher))} — คุณสอนคาบนี้ และ ${esc(sn(r.teacher))} จะไปสอนคาบ ${esc(it.swap.code)} ของคุณ ${fmtD(it.swap.date)} คาบ ${it.swap.p}`}</div>
+    <div class="small muted" style="margin-top:4px">${r.id} · จัดโดย ${esc(sn(r.arrangedBy))} · ${fmtDT(r.createdAt)}${r.reason?' · '+esc(r.reason):''}</div>
+    ${act?`<div class="row" style="margin-top:10px"><button class="btn ok" data-act="ack" data-rid="${r.id}" data-iid="${it.id}">${ICON.check} รับทราบ</button>
+      <button class="btn bad" data-act="decline" data-rid="${r.id}" data-iid="${it.id}">ขอเปลี่ยน (ไม่สะดวก)</button><span class="sp"></span><button class="btn sm" data-act="open" data-rid="${r.id}">รายละเอียด</button></div>`
+      : `<div class="row" style="margin-top:8px"><span class="chip s-approved">✓ รับทราบ ${fmtDT(it.ackAt)}</span>${stChip(rst(r))}</div>`}
+  </div></div>`;
+  return `<div class="page-h"><h2>รอฉันรับทราบ</h2><div class="r">${pend.length>1?`<button class="btn ok" data-act="ackall">${ICON.check} รับทราบทั้งหมด (${pend.length})</button>`:''}</div></div>
+    ${pend.length?pend.map(x=>card(x,true)).join(''):'<div class="card"><div class="empty">ไม่มีรายการรอรับทราบ</div></div>'}
+    <h3 style="margin:22px 0 10px;font-size:17px">คาบสอนแทนที่จะถึง (รับทราบแล้ว)</h3>
+    ${upcoming.length?upcoming.map(x=>card(x,false)).join(''):'<div class="card"><div class="empty">ไม่มี</div></div>'}`;
+}
+
+/* ---------- list ---------- */
+function vList(){
+  const tabs = [['mine','ของฉัน'],['tome','ฉันถูกจัด']];
+  if (isDept()) tabs.push(['dept','กลุ่มสาระฯ ของฉัน']);
+  tabs.push(['all','ทั้งหมด']);
+  if (!tabs.some(t=>t[0]===UI.listTab)) UI.listTab='mine';
+  const hg = ME.ti!=null?headGroups(ME.ti):[];
+  let list = S.requests.filter(r => UI.listTab==='all' ? true :
+    UI.listTab==='mine' ? (r.teacher===ME.ti || r.arrangedBy===ME.ti) :
+    UI.listTab==='tome' ? r.items.some(i=>ackWho(i)===ME.ti) : hg.includes(gOf(r.teacher)));
+  list = list.slice().sort((a,b)=>b.dates[0].localeCompare(a.dates[0]));
+  return `<div class="page-h"><h2>รายการจัดสอนแทน</h2><div class="r"><button class="btn gold" data-go="new">${ICON.plus} แจ้งลา / จัดสอนแทน</button></div></div>
+  <div class="card"><div class="card-h"><div class="seg">${tabs.map(([k,l])=>`<button class="${UI.listTab===k?'on':''}" data-act="ltab" data-k="${k}">${l}</button>`).join('')}</div>
+    <span class="sp"></span><span class="small muted">${list.length} รายการ</span></div>
+  <div class="tbl-wrap">${reqTable(list)}</div></div>`;
+}
+
+/* ---------- approve ---------- */
+function vApprove(){
+  const groups = {review:'รอเห็นชอบ', ack:'รอรับทราบ', fix:'ต้องจัดใหม่', approved:'สมบูรณ์แล้ว'};
+  const list = S.requests.filter(r=>rst(r)===UI.apTab).sort((a,b)=>a.dates[0].localeCompare(b.dates[0]));
+  return `<div class="page-h"><div><div class="muted small">หัวหน้ากลุ่มบริหารงานวิชาการ</div><h2>เห็นชอบการจัดสอนแทน</h2></div>
+    <div class="r">${UI.apTab==='review'?`<button class="btn ok" data-act="bulkapprove">${ICON.check} เห็นชอบรายการที่เลือก</button>`:''}</div></div>
+  <div class="card"><div class="card-h"><div class="seg">${Object.entries(groups).map(([k,l])=>`<button class="${UI.apTab===k?'on':''}" data-act="aptab" data-k="${k}">${l} (${S.requests.filter(r=>rst(r)===k).length})</button>`).join('')}</div></div>
+  ${UI.apTab==='review'?'<div class="card-b" style="padding-bottom:0"><div class="note">ทุกคาบในรายการนี้ ครูผู้ถูกจัดกดรับทราบครบแล้ว · คลิกแถวเพื่อดูรายละเอียดและตรวจสอบก่อนเห็นชอบ</div></div>':''}
+  <div class="tbl-wrap" style="margin-top:8px">${reqTable(list, UI.apTab==='review')}</div></div>`;
+}
+
+/* ---------- daily board ---------- */
+function boardRows(d){
+  const rows=[]; for (const r of S.requests){ if (r.status==='cancelled') continue;
+    for (const it of r.items){ if (NT.has(it.code)) continue;
+      if (it.date===d) rows.push({r,it,p:it.p,kind:'out'});
+      if ((it.method==='swapT'||it.method==='swapF') && it.swap.date===d) rows.push({r,it,p:it.swap.p,kind:'in'}); } }
+  return rows.sort((a,b)=>a.p-b.p || a.it.cls.localeCompare(b.it.cls,'th'));
+}
+function boardTable(d, limit){
+  let rows = boardRows(d); const more = limit && rows.length>limit ? rows.length-limit : 0; if (limit) rows=rows.slice(0,limit);
+  if (!rows.length) return '<div class="empty">ไม่มีการจัดสอนแทนในวันนี้</div>';
+  return `<div class="tbl-wrap"><table class="t"><thead><tr><th>คาบ</th><th>ห้อง</th><th>วิชา</th><th>ครูเดิม</th><th>วิธี</th><th>ผู้สอนในคาบนี้</th><th>สถานะ</th></tr></thead><tbody>
+  ${rows.map(({r,it,p,kind})=>{ const st=rst(r); const who = kind==='in' ? (it.method==='swapT'? tn(r.teacher) : tn(r.teacher)) :
+      it.method==='sub'?tn(it.sub): it.method==='swapT'?tn(it.swap.t): it.method==='swapF'?'— (ย้ายไป '+fmtD(it.swap.date)+' คาบ '+it.swap.p+')': it.method==='none'?'ครูร่วมสอน':'ยังไม่ได้จัด';
+    const ack = kind==='out' && ackNeeded(it) ? (it.ack==='ack'?'':it.ack==='declined'?' <span class="chip s-fix">ขอเปลี่ยน</span>':' <span class="chip s-ack">รอรับทราบ</span>') : '';
+    return `<tr class="click" data-act="open" data-rid="${r.id}"><td class="nowrap"><b>${p}</b> <span class="tiny muted">${perT(p)}</span></td><td><b>${esc(it.cls)}</b></td>
+      <td class="small">${esc(kind==='in'&&it.method==='swapT'?it.swap.code:it.code)} ${esc(kind==='in'&&it.method==='swapT'?it.swap.subj:it.subj)}</td>
+      <td class="small">${esc(sn(kind==='in'&&it.method==='swapT'?it.swap.t:r.teacher))} ${kind==='out'?tyChip(r.type):''}</td>
+      <td class="small">${kind==='in'?(it.method==='swapT'?'สลับคาบ (คาบคืน)':'สอนชดเชย (ย้ายมา)'):METHODS[it.method]?.short||'-'}</td>
+      <td><b>${esc(who)}</b>${ack}</td><td>${stChip(st)}</td></tr>`; }).join('')}
+  </tbody></table></div>${more?`<div class="small muted" style="padding:8px 12px">และอีก ${more} คาบ…</div>`:''}`;
+}
+function vBoard(){
+  const d = UI.board || nthSchool(0);
+  const away = S.requests.filter(r=>r.status!=='cancelled' && r.dates.includes(d));
+  const rows = boardRows(d), pend = rows.filter(x=>rst(x.r)!=='approved').length;
+  const prev = (()=>{ let s=addD(d,-1); for(let i=0;i<20&&!isSchool(s);i++) s=addD(s,-1); return s; })();
+  const next = (()=>{ let s=addD(d,1); for(let i=0;i<20&&!isSchool(s);i++) s=addD(s,1); return s; })();
+  return `<div class="page-h"><div><div class="muted small">ตารางสอนแทนรายวัน</div><h2>${fmtL(d)}</h2></div>
+    <div class="r"><button class="btn" data-act="bday" data-d="${prev}">‹ ก่อนหน้า</button><input type="date" style="width:auto" data-act="bpick" value="${d}">
+    <button class="btn" data-act="bday" data-d="${next}">ถัดไป ›</button><button class="btn" data-act="bprint" data-d="${d}">${ICON.print} พิมพ์</button></div></div>
+  ${!isSchool(d)?'<div class="note warn" style="margin-bottom:12px">วันนี้ไม่ใช่วันเรียน</div>':''}
+  <div class="grid g3" style="margin-bottom:14px">
+    <div class="card kpi"><div class="v num">${away.length}</div><div class="l">ครูไม่อยู่</div></div>
+    <div class="card kpi"><div class="v num">${rows.length}</div><div class="l">คาบที่มีการเปลี่ยนแปลง</div></div>
+    <div class="card kpi" style="border-left-color:${pend?'var(--warn)':'var(--ok)'}"><div class="v num">${pend}</div><div class="l">คาบที่ยังไม่สมบูรณ์</div></div>
+  </div>
+  ${away.length?`<div class="card" style="margin-bottom:14px"><div class="card-b row">${away.map(r=>`<span class="chip ty-${r.type}" style="cursor:pointer" data-act="open" data-rid="${r.id}">${esc(sn(r.teacher))} · ${TYPES[r.type].label}</span>`).join('')}</div></div>`:''}
+  <div class="card">${boardTable(d)}</div>`;
+}
+
+/* ---------- statistics ---------- */
+function statData(from, to){
+  const T = D.teachers.map((t,ti)=>({ti, g:t.g, days:{personal:0,official:0,mission:0,sick:0}, reqs:0, need:0, byHead:0, given:0, swapT:0, swapF:0, swapPartner:0}));
+  const heat = [...Array(5)].map(()=>Array(10).fill(0)); let ackH=[], items=0, approved=0, same=0, subs=0;
+  for (const r of S.requests){ if (r.status==='cancelled') continue;
+    const ds = r.dates.filter(d=>d>=from&&d<=to); if (!ds.length) continue;
+    const o=T[r.teacher]; o.reqs++; o.days[r.type]+=ds.length;
+    for (const it of coverItems(r)){ if (it.date<from||it.date>to) continue;
+      items++; o.need++; if (r.arrangedBy!==r.teacher) o.byHead++; if (r.status==='approved') approved++;
+      heat[wd(it.date)][it.p]++;
+      if (it.method==='sub' && it.ack!=='declined'){ T[it.sub].given++; subs++; if (gOf(it.sub)===gOf(r.teacher)) same++; }
+      if (it.method==='swapT' && it.ack!=='declined'){ o.swapT++; T[it.swap.t].swapPartner++; }
+      if (it.method==='swapF') o.swapF++;
+      if (it.ackAt) ackH.push((new Date(it.ackAt)-new Date(r.createdAt))/36e5);
+    } }
+  return {T, heat, items, approved, subs, same, ackAvg: ackH.length? ackH.reduce((a,b)=>a+b,0)/ackH.length : 0};
+}
+function vStats(){
+  UI.sFrom ||= S.settings.termStart; UI.sTo ||= maxDate();
+  const st = statData(UI.sFrom, UI.sTo);
+  const rows = st.T.filter(t=>t.reqs||t.given||t.swapPartner);
+  const key = UI.statSort; rows.sort((a,b)=>(key==='name'? D.teachers[a.ti].n.localeCompare(D.teachers[b.ti].n,'th') : (key==='given'? b.given-a.given : b.need-a.need)));
+  const byG = D.groups.map((g,i)=>({i, need:st.T.filter(t=>t.g===i).reduce((s,t)=>s+t.need,0), given:st.T.filter(t=>t.g===i).reduce((s,t)=>s+t.given+t.swapPartner,0)}));
+  const mx = Math.max(1,...byG.map(x=>Math.max(x.need,x.given)));
+  const hmx = Math.max(1,...st.heat.flat());
+  const totDays = rows.reduce((s,t)=>s+Object.values(t.days).reduce((a,b)=>a+b,0),0);
+  return `<div class="page-h"><div><div class="muted small">สถิติการจัดสอนแทน</div><h2>ภาพรวม</h2></div>
+    <div class="r"><input type="date" style="width:auto" data-s="sFrom" value="${UI.sFrom}"><span class="muted" style="align-self:center">ถึง</span><input type="date" style="width:auto" data-s="sTo" value="${UI.sTo}">
+    <button class="btn" data-act="csv">${ICON.dl} ส่งออก CSV (รายคาบ)</button></div></div>
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card kpi"><div class="v num">${totDays}</div><div class="l">วันลา/ไม่อยู่รวม (วัน·คน)</div></div>
+    <div class="card kpi"><div class="v num">${st.items}</div><div class="l">คาบที่ต้องจัดสอนแทน</div></div>
+    <div class="card kpi" style="border-left-color:var(--ok)"><div class="v num">${st.items?Math.round(st.approved/st.items*100):0}%</div><div class="l">สมบูรณ์ (เห็นชอบแล้ว)</div></div>
+    <div class="card kpi" style="border-left-color:var(--info)"><div class="v num">${st.ackAvg.toFixed(1)} ชม.</div><div class="l">เวลาเฉลี่ยจนรับทราบ · กลุ่มเดียวกัน ${st.subs?Math.round(st.same/st.subs*100):0}%</div></div>
+  </div>
+  <div class="grid g2" style="margin-bottom:14px">
+    <div class="card"><div class="card-h"><h3>รายกลุ่มสาระฯ</h3><span class="small muted"><span style="color:var(--t-sick)">■</span> คาบที่ต้องหาคนแทน &nbsp;<span style="color:var(--g1)">■</span> คาบที่สอนแทน/สลับให้ผู้อื่น</span></div><div class="card-b">
+      ${byG.map(x=>`<div class="bar"><span class="small">${GSHORT[x.i]}</span><span><div class="tr"><i style="width:${x.need/mx*100}%;background:var(--t-sick)"></i></div><div class="tr" style="margin-top:2px"><i style="width:${x.given/mx*100}%;background:var(--g1)"></i></div></span><span class="num small">${x.need}/${x.given}</span></div>`).join('')}
+    </div></div>
+    <div class="card"><div class="card-h"><h3>วัน × คาบ ที่มีการสอนแทนบ่อย</h3></div><div class="card-b"><div class="heat">
+      <div></div>${[1,2,3,4,5,6,7,8,9].map(p=>`<div class="hd">${p}</div>`).join('')}
+      ${D.days.map((dn,di)=>`<div class="hd" style="text-align:left">${dn.replace('วัน','')}</div>${[1,2,3,4,5,6,7,8,9].map(p=>{const v=st.heat[di][p];return `<div style="background:color-mix(in srgb,var(--gold) ${Math.round(v/hmx*90)}%,var(--mute-bg))" title="${v} คาบ">${v||''}</div>`;}).join('')}`).join('')}
+    </div></div></div>
+  </div>
+  <div class="card"><div class="card-h"><h3>รายบุคคล</h3><span class="small muted">คลิกชื่อเพื่อดูบันทึกละเอียด</span></div><div class="tbl-wrap"><table class="t"><thead><tr>
+    <th class="sort" data-act="ssort" data-k="name">ครู</th><th>กลุ่มสาระ</th><th>ลากิจ</th><th>ลาป่วย</th><th>ราชการ</th><th>ภารกิจ</th>
+    <th class="sort" data-act="ssort" data-k="need">คาบที่ต้องจัด ▾</th><th>หน.จัดให้</th><th>สลับกับครู</th><th>สลับคาบว่าง</th><th class="sort" data-act="ssort" data-k="given">สอนแทนผู้อื่น ▾</th><th>เป็นคู่สลับ</th></tr></thead><tbody>
+    ${rows.length?rows.map(t=>`<tr class="click" data-act="person" data-ti="${t.ti}"><td>${esc(tn(t.ti))}</td><td>${gtag(t.g)}</td>
+      ${['personal','sick','official','mission'].map(k=>`<td class="num">${t.days[k]||''}</td>`).join('')}
+      <td class="num"><b>${t.need||''}</b></td><td class="num">${t.byHead||''}</td><td class="num">${t.swapT||''}</td><td class="num">${t.swapF||''}</td><td class="num"><b>${t.given||''}</b></td><td class="num">${t.swapPartner||''}</td></tr>`).join(''):'<tr><td colspan="12" class="empty">ไม่มีข้อมูล</td></tr>'}
+  </tbody></table></div></div>`;
+}
+function personModal(ti){
+  const out=[], inn=[];
+  for (const r of S.requests){ if (r.status==='cancelled') continue;
+    for (const it of coverItems(r)){
+      if (r.teacher===ti) out.push({r,it});
+      if (ackWho(it)===ti) inn.push({r,it}); } }
+  const row = ({r,it},who) => `<tr class="click" data-act="open" data-rid="${r.id}"><td class="nowrap">${fmtD(it.date)} คาบ ${it.p}</td><td>${esc(it.cls)} ${esc(it.code)}</td><td>${tyChip(r.type)}</td><td>${METHODS[it.method]?.short||'-'}</td><td>${esc(who)}</td><td>${ackNeeded(it)?ackChip(it.ack):''}</td><td>${stChip(rst(r))}</td></tr>`;
+  modal(`<div class="modal"><div class="modal-h"><h3>${esc(tn(ti))}</h3>${gtag(gOf(ti))}<button class="x" data-act="close">×</button></div><div class="modal-b">
+    <h4 style="margin-bottom:6px">คาบของตนที่ผู้อื่นสอนแทน/สลับ (${out.length})</h4>
+    <div class="tbl-wrap"><table class="t"><thead><tr><th>วัน/คาบ</th><th>ห้อง</th><th>กรณี</th><th>วิธี</th><th>ผู้รับผิดชอบ</th><th>รับทราบ</th><th>สถานะ</th></tr></thead><tbody>${out.map(x=>row(x, x.it.method==='sub'?sn(x.it.sub):x.it.method==='swapT'?sn(x.it.swap.t):'ตนเอง')).join('')||'<tr><td colspan="7" class="muted">—</td></tr>'}</tbody></table></div>
+    <h4 style="margin:14px 0 6px">สอนแทน/สลับคาบให้ผู้อื่น (${inn.length})</h4>
+    <div class="tbl-wrap"><table class="t"><thead><tr><th>วัน/คาบ</th><th>ห้อง</th><th>กรณี</th><th>วิธี</th><th>ให้กับ</th><th>รับทราบ</th><th>สถานะ</th></tr></thead><tbody>${inn.map(x=>row(x, sn(x.r.teacher))).join('')||'<tr><td colspan="7" class="muted">—</td></tr>'}</tbody></table></div>
+  </div></div>`);
+}
+function exportCSV(){
+  const h=['เลขที่','สถานะ','กรณี','ครูผู้ลา','กลุ่มสาระผู้ลา','จัดโดย','สร้างเมื่อ','วันที่','คาบ','เวลา','ห้อง','รหัสวิชา','วิชา','วิธีจัด','ผู้สอนแทน/คู่สลับ','กลุ่มสาระผู้สอนแทน','สลับไปวันที่','สลับไปคาบ','รับทราบ','รับทราบเมื่อ','เห็นชอบเมื่อ'];
+  const L=[h];
+  for (const r of S.requests) for (const it of coverItems(r)){ const w=ackWho(it);
+    L.push([r.id, RST[rst(r)].label, TYPES[r.type].label, tn(r.teacher), D.groups[gOf(r.teacher)], tn(r.arrangedBy), r.createdAt, it.date, it.p, D.times[it.p], it.cls, it.code, it.subj,
+      METHODS[it.method]?.label||'', w!=null?tn(w):'', w!=null?D.groups[gOf(w)]:'', it.swap?.date||'', it.swap?.p||'', it.ack||'', it.ackAt||'', r.approvedAt||'']); }
+  const csv = '﻿'+L.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='substitution-records-2-2569.csv'; a.click();
+}
+
+/* ---------- log ---------- */
+function vLog(){
+  const q=UI.logQ.trim(); const list=S.log.filter(l=>!q || JSON.stringify(l).includes(q));
+  return `<div class="page-h"><h2>บันทึกระบบ (Audit log)</h2><div class="r"><input type="text" style="width:260px" placeholder="ค้นหา ชื่อ/เลขที่/การกระทำ" data-act="logq" value="${esc(UI.logQ)}"></div></div>
+  <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>เวลา</th><th>ผู้ดำเนินการ</th><th>การกระทำ</th><th>เลขที่</th><th>รายละเอียด</th></tr></thead><tbody>
+  ${list.slice(0,300).map(l=>`<tr ${l.rid?`class="click" data-act="open" data-rid="${l.rid}"`:''}><td class="nowrap small">${fmtDT(l.at)}</td><td>${esc(l.by)}</td><td><b>${esc(l.act)}</b></td><td class="nowrap">${esc(l.rid||'')}</td><td class="small">${esc(l.detail||'')}</td></tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+
+/* ---------- settings ---------- */
+function vSettings(){
+  const st=S.settings, opts=(g,sel)=>D.teachers.map((t,ti)=>({t,ti})).filter(x=>g==null||x.t.g===g).map(x=>`<option value="${x.ti}" ${x.ti===sel?'selected':''}>${esc(x.t.n)}</option>`).join('');
+  return `<div class="page-h"><h2>ตั้งค่าระบบ</h2></div>
+  <div class="grid g2">
+    <div class="card"><div class="card-h"><h3>หัวหน้ากลุ่มสาระการเรียนรู้</h3></div><div class="card-b">
+      <div class="note warn" style="margin-bottom:10px">ค่าเริ่มต้นเป็น <b>ค่าสมมติ</b> (คนแรกตามตัวอักษรในกลุ่ม) — โปรดกำหนดให้ถูกต้อง</div>
+      ${D.groups.map((g,i)=>`<div class="field"><label class="f">${esc(g)}</label><select data-set="head" data-g="${i}">${opts(i,st.deptHeads[i])}</select></div>`).join('')}
+    </div></div>
+    <div>
+      <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>หัวหน้ากลุ่มบริหารงานวิชาการ</h3></div><div class="card-b">
+        <select data-set="acad"><option value="">— บัญชีกลาง (ไม่ผูกกับครู) —</option>${opts(null,st.acadHead)}</select></div></div>
+      <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>กฎการจัด</h3></div><div class="card-b grid g2">
+        <div class="field"><label class="f">จัดล่วงหน้าได้สูงสุด (วัน)</label><input type="text" data-set="maxAhead" value="${st.maxAhead}"></div>
+        <div class="field"><label class="f">ลากิจ/ราชการ/ภารกิจ ต้องจัดล่วงหน้าอย่างน้อย (วัน)</label><input type="text" data-set="leadDays" value="${st.leadDays}"></div>
+        <div class="field"><label class="f">เปิดภาคเรียน</label><input type="date" data-set="termStart" value="${st.termStart}"></div>
+        <div class="field"><label class="f">ปิดภาคเรียน</label><input type="date" data-set="termEnd" value="${st.termEnd}"></div>
+      </div></div>
+      <div class="card"><div class="card-h"><h3>วันหยุด (ไม่นับเป็นวันเรียน)</h3></div><div class="card-b">
+        <textarea data-set="holidays" style="min-height:120px">${st.holidays.join('\n')}</textarea><div class="tiny muted">หนึ่งบรรทัดต่อหนึ่งวัน รูปแบบ ค.ศ. YYYY-MM-DD · ค่าเริ่มต้นเป็นค่าสมมติ</div></div></div>
+    </div></div>`;
+}
+
+/* ================================================================
+   รายละเอียดคำขอ (modal)
+   ================================================================ */
+function openReq(id){ UI.detail=id; renderDetail(); }
+function renderDetail(){
+  const r = S.requests.find(x=>x.id===UI.detail); if (!r) return closeModal();
+  const st=rst(r), ci=coverItems(r), need=ci.filter(ackNeeded), ok=need.filter(i=>i.ack==='ack').length;
+  const owner = canArrange(r) && (r.teacher===ME.ti || r.arrangedBy===ME.ti || isAcad());
+  const s1 = 'done', s2 = st==='fix'?'err': need.length===ok?'done':'cur', s3 = st==='approved'?'done':st==='returned'?'err':st==='review'?'cur':'', s4 = st==='approved'?'done':'';
+  const rows = ci.map(it=>{ const w=ackWho(it), mineAck = it.ack==='pending' && w===ME.ti;
+    return `<tr><td class="nowrap"><b>${fmtD(it.date)}</b> คาบ ${it.p}<div class="tiny muted">${perT(it.p)}</div></td><td><b>${esc(it.cls)}</b><div class="small">${esc(it.code)} ${esc(it.subj)}</div></td>
+      <td>${METHODS[it.method]?.label||'-'}</td><td class="small">${pickedText(it)}</td>
+      <td>${ackNeeded(it)?ackChip(it.ack):ackChip(null)}${it.ackAt?`<div class="tiny muted">${fmtDT(it.ackAt)}</div>`:''}${it.declNote?`<div class="tiny" style="color:var(--bad)">“${esc(it.declNote)}”</div>`:''}</td>
+      <td class="nowrap">${mineAck?`<button class="btn sm ok" data-act="ack" data-rid="${r.id}" data-iid="${it.id}">รับทราบ</button> <button class="btn sm bad" data-act="decline" data-rid="${r.id}" data-iid="${it.id}">ขอเปลี่ยน</button>`:''}
+        ${owner && it.ack==='declined' && r.status==='open'?`<button class="btn sm gold" data-act="fixitem" data-rid="${r.id}" data-iid="${it.id}">จัดใหม่</button>`:''}</td></tr>`; }).join('');
+  const acts = [];
+  if (isAcad() && st==='review') acts.push(`<button class="btn bad" data-act="return" data-rid="${r.id}">ส่งกลับแก้ไข</button><button class="btn ok" data-act="approve" data-rid="${r.id}">${ICON.check} เห็นชอบ</button>`);
+  if (isAcad() && (st==='ack'||st==='fix')) acts.push(`<span class="small muted">รอให้ผู้ถูกจัดรับทราบครบก่อนจึงเห็นชอบได้</span>`);
+  if (owner && st==='returned') acts.push(`<button class="btn gold" data-act="editreq" data-rid="${r.id}">แก้ไขและส่งใหม่</button>`);
+  if (owner && !['cancelled'].includes(st) && r.dates[r.dates.length-1]>=TODAY) acts.unshift(`<button class="btn bad" data-act="cancelreq" data-rid="${r.id}">ยกเลิกคำขอ</button>`);
+  modal(`<div class="modal"><div class="modal-h"><h3>${r.id}</h3>${tyChip(r.type)}${stChip(st)}<button class="x" data-act="close">×</button></div>
+  <div class="modal-b">
+    <div class="steps" style="margin-bottom:14px">
+      <div class="step ${s1}"><span class="b">✓</span>จัดสอนแทน</div>
+      <div class="step ${s2}"><span class="b">${s2==='done'?'✓':s2==='err'?'!':'2'}</span>ผู้ถูกจัดรับทราบ ${need.length?`(${ok}/${need.length})`:''}</div>
+      <div class="step ${s3}"><span class="b">${s3==='done'?'✓':s3==='err'?'!':'3'}</span>หัวหน้าวิชาการเห็นชอบ</div>
+      <div class="step ${s4}"><span class="b">${s4?'✓':'4'}</span>สมบูรณ์</div></div>
+    <div class="grid g2" style="margin-bottom:12px;gap:6px 14px">
+      <div><span class="muted small">ครูผู้ลา/ไม่อยู่</span><div><b>${esc(tn(r.teacher))}</b> ${gtag(gOf(r.teacher))}</div></div>
+      <div><span class="muted small">วันที่</span><div><b>${r.dates.map(fmtD).join(', ')}</b> (${r.dates.length} วัน · ${ci.length} คาบ)</div></div>
+      <div><span class="muted small">จัดโดย</span><div>${esc(tn(r.arrangedBy))}${r.arrangedBy!==r.teacher&&r.arrangedBy!=null?' <span class="chip s-review">หัวหน้ากลุ่มสาระฯ</span>':''}</div></div>
+      <div><span class="muted small">เหตุผล</span><div>${esc(r.reason||'-')}${r.file?` · <a href="#" onclick="return false">📎 ${esc(r.file)}</a>`:''}</div></div>
+    </div>
+    ${st==='returned'&&r.returnNote?`<div class="note bad" style="margin-bottom:10px">ส่งกลับ: ${esc(r.returnNote)}</div>`:''}
+    <div class="tbl-wrap"><table class="t"><thead><tr><th>วัน/คาบ</th><th>ห้อง/วิชา</th><th>วิธีจัด</th><th>ผู้รับผิดชอบ</th><th>รับทราบ</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="muted">ไม่มีคาบที่ต้องจัด</td></tr>'}</tbody></table></div>
+    <h4 style="margin:16px 0 8px">ประวัติการดำเนินการ</h4>
+    <ul class="tl">${r.history.slice().sort((a,b)=>a.at.localeCompare(b.at)).map(h=>`<li><b>${esc(h.act)}</b> — ${esc(h.by)} <span class="muted tiny">${fmtDT(h.at)}</span>${h.note?`<div class="small muted">${esc(h.note)}</div>`:''}</li>`).join('')}</ul>
+  </div>
+  <div class="modal-f"><button class="btn" data-act="printreq" data-rid="${r.id}">${ICON.print} พิมพ์บันทึก</button><span class="sp"></span>${acts.join('')}</div></div>`);
+}
+function renderFixModal(){
+  const {req, iid} = UI.fix; const it = req.items.find(i=>i.id===iid); UI.open = iid;
+  modal(`<div class="modal"><div class="modal-h"><h3>จัดใหม่ · ${req.id}</h3><button class="x" data-act="fixcancel">×</button></div><div class="modal-b">
+    ${it.declNote?`<div class="note bad" style="margin-bottom:10px">${esc(sn(UI.fix.prevWho))} ขอเปลี่ยน: “${esc(it.declNote)}”</div>`:''}
+    ${itemEditor(req, it)}</div>
+    <div class="modal-f"><button class="btn" data-act="fixcancel">ยกเลิก</button><button class="btn gold" data-act="fixsave" ${it.ack==='declined'||!it.method?'disabled':''}>บันทึกและแจ้งผู้ถูกจัด</button></div></div>`);
+}
+
+/* ---------- print ---------- */
+function printReq(r){
+  const ci=coverItems(r);
+  $('#print').innerHTML = `<div style="text-align:center"><b>${esc(D.school)}</b></div><h2>บันทึกการจัดสอนแทน เลขที่ ${r.id}</h2>
+    <p>ข้าพเจ้า <b>${esc(tn(r.teacher))}</b> กลุ่มสาระการเรียนรู้${esc(D.groups[gOf(r.teacher)])} กรณี <b>${TYPES[r.type].label}</b> วันที่ ${r.dates.map(fmtL).join(', ')}<br>เหตุผล: ${esc(r.reason||'-')}</p>
+    <table><thead><tr><th>วัน/คาบ</th><th>ห้อง</th><th>วิชา</th><th>วิธีจัด</th><th>ผู้สอนแทน/คู่สลับ</th><th>รับทราบ (อิเล็กทรอนิกส์)</th></tr></thead><tbody>
+    ${ci.map(it=>`<tr><td>${fmtD(it.date)} คาบ ${it.p} (${perT(it.p)})</td><td>${esc(it.cls)}</td><td>${esc(it.code)} ${esc(it.subj)}</td><td>${METHODS[it.method]?.label||''}</td>
+      <td>${it.method==='sub'?esc(tn(it.sub)):it.method==='swapT'?esc(tn(it.swap.t))+` (คืน ${fmtD(it.swap.date)} คาบ ${it.swap.p})`:it.method==='swapF'?`ย้ายไป ${fmtD(it.swap.date)} คาบ ${it.swap.p}`:'ครูร่วมสอน'}</td>
+      <td>${it.ackAt?fmtDT(it.ackAt):ackNeeded(it)?'ยังไม่รับทราบ':'-'}</td></tr>`).join('')}</tbody></table>
+    <div class="sig"><div>ลงชื่อ ........................................ ผู้จัด<br>(${esc(tn(r.arrangedBy))})<br>${fmtDT(r.createdAt)}</div>
+    <div>${r.approvedAt?`เห็นชอบ (อิเล็กทรอนิกส์)<br>${esc(r.approvedBy||'')}<br>${fmtDT(r.approvedAt)}`:'ลงชื่อ ........................................<br>หัวหน้ากลุ่มบริหารงานวิชาการ'}</div></div>`;
+  window.print();
+}
+function printBoard(d){
+  const rows=boardRows(d);
+  $('#print').innerHTML = `<div style="text-align:center"><b>${esc(D.school)}</b></div><h2>ตารางสอนแทน ${fmtL(d)}</h2>
+  <table><thead><tr><th>คาบ</th><th>ห้อง</th><th>วิชา</th><th>ครูเดิม</th><th>กรณี</th><th>ผู้สอน</th><th>สถานะ</th></tr></thead><tbody>
+  ${rows.map(({r,it,p,kind})=>`<tr><td>${p} (${perT(p)})</td><td>${esc(it.cls)}</td><td>${esc(it.code)}</td><td>${esc(tn(r.teacher))}</td><td>${TYPES[r.type].label}</td>
+    <td>${kind==='in'?esc(tn(r.teacher))+' (คาบคืน/ชดเชย)':it.method==='sub'?esc(tn(it.sub)):it.method==='swapT'?esc(tn(it.swap.t)):it.method==='swapF'?'ย้ายไป '+fmtD(it.swap.date):'ครูร่วมสอน'}</td><td>${RST[rst(r)].label}</td></tr>`).join('')}</tbody></table>`;
+  window.print();
+}
+
+/* ---------- modal / toast ---------- */
+function modal(html){ let ov=$('#ov'); if (!ov){ ov=document.createElement('div'); ov.id='ov'; ov.className='ov'; document.body.appendChild(ov);
+  ov.addEventListener('click', e=>{ if (e.target===ov){ if (UI.fix) { UI.fix=null; } closeModal(); } }); } ov.innerHTML=html; }
+function closeModal(){ const ov=$('#ov'); if (ov) ov.remove(); UI.detail=null; }
+function toast(t){ const d=document.createElement('div'); d.className='toast'; d.textContent=t; document.body.appendChild(d); setTimeout(()=>d.remove(),2600); }
+function promptModal(title, ph, cb){
+  modal(`<div class="modal sm"><div class="modal-h"><h3>${esc(title)}</h3><button class="x" data-act="close">×</button></div><div class="modal-b"><textarea id="pm" placeholder="${esc(ph)}"></textarea></div>
+  <div class="modal-f"><button class="btn" data-act="close">ยกเลิก</button><button class="btn pri" id="pmok">ยืนยัน</button></div></div>`);
+  $('#pmok').onclick = () => { const v=$('#pm').value.trim(); if (!v){ $('#pm').focus(); return; } cb(v); };
+}
+
+/* ---------- actions ---------- */
+function doAck(r, it){ it.ack='ack'; it.ackAt=new Date().toISOString(); hist(r,'รับทราบ',`${fmtD(it.date)} คาบ ${it.p} ${it.cls}`); log('รับทราบ', r.id, `${fmtD(it.date)} คาบ ${it.p} ${it.cls}`);
+  if (rst(r)==='review'){ hist(r,'ผู้ถูกจัดรับทราบครบ — ส่งหัวหน้ากลุ่มบริหารงานวิชาการ'); } }
+document.addEventListener('click', e => {
+  if (!e.target.closest('[data-act="bell"]')){ const dd=$('.dd'); if (dd && (!e.target.closest('.dd') || e.target.closest('[data-act],[data-go]'))) setTimeout(()=>dd.remove()); }
+  const go = e.target.closest('[data-go]'); if (go){ VIEW=go.dataset.go; if (VIEW==='new' && !W) newDraft(); closeModal(); render(); window.scrollTo(0,0); return; }
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  if (e.target.closest('[data-stop]') && el.dataset.act==='open') return;
+  const a = el.dataset.act, rid = el.dataset.rid, iid = el.dataset.iid;
+  const R = rid ? S.requests.find(x=>x.id===rid) : null;
+  switch(a){
+    case 'login': login(+$('#lt').value); break;
+    case 'qlogin': login(+el.dataset.ti); break;
+    case 'qacad': login(null, true); break;
+    case 'logout': ME=null; saveSess(); closeModal(); render(); break;
+    case 'reset': if (confirm('ล้างข้อมูลตัวอย่างทั้งหมดและสร้างใหม่?')){ try{localStorage.removeItem(KEY);}catch(_){} seed(); W=null; ME=null; saveSess(); render(); } break;
+    case 'bell': { const old=$('.dd'); if (old){ old.remove(); break; } const n=notifications(); const d=document.createElement('div'); d.className='dd';
+      d.innerHTML = n.length ? n.map(x=>`<div class="it" ${x.rid?`data-act="open" data-rid="${x.rid}"`:`data-go="${x.go}"`}>${esc(x.t)}</div>`).join('') : '<div class="it muted">ไม่มีการแจ้งเตือน</div>';
+      document.body.appendChild(d); break; }
+    case 'open': openReq(rid); break;
+    case 'close': closeModal(); if (UI.fix) UI.fix=null; break;
+    case 'wtype': W.req.type=el.dataset.k; regen(); render(); break;
+    case 'iopen': UI.open = UI.open===iid ? null : iid; rerenderEditor(); break;
+    case 'itab': UI.tab[iid]=el.dataset.m; rerenderEditor(); break;
+    case 'more': UI.more[iid]=!UI.more[iid]; rerenderEditor(); break;
+    case 'pick': { const [r,it]=findItem(iid); it.method='sub'; it.sub=+el.dataset.ti; delete it.swap; afterPick(r,it); break; }
+    case 'pickT': { const [r,it]=findItem(iid); const o=UI.cache[iid+'T'].list[+el.dataset.k]; it.method='swapT'; it.swap={t:o.t,date:o.date,p:o.p,code:o.code,subj:o.subj}; delete it.sub; afterPick(r,it); break; }
+    case 'pickF': { const [r,it]=findItem(iid); const o=UI.cache[iid+'F'].list[+el.dataset.k]; it.method='swapF'; it.swap={date:o.date,p:o.p}; delete it.sub; afterPick(r,it); break; }
+    case 'pickN': { const [r,it]=findItem(iid); it.method='none'; delete it.sub; delete it.swap; afterPick(r,it); break; }
+    case 'autofill': { const r=W.req; for (const it of coverItems(r)) if (!it.method){ const c=candSub(r,it); if (c.avail.length){ it.method='sub'; it.sub=c.avail[0].ti; it.ack='pending'; } } UI.open=null; render(); break; }
+    case 'wcancel': W=null; VIEW='home'; render(); break;
+    case 'wsubmit': confirmSubmit(); break;
+    case 'wsend': doSubmit(); break;
+    case 'ack': doAck(R, R.items.find(i=>i.id===iid)); save(); toast('รับทราบแล้ว'); render(); if (UI.detail) renderDetail(); break;
+    case 'ackall': myPending().forEach(({r,it})=>doAck(r,it)); save(); toast('รับทราบทั้งหมดแล้ว'); render(); break;
+    case 'decline': promptModal('ขอเปลี่ยน (ไม่สะดวกสอนแทน)','ระบุเหตุผล เช่น ติดคุมสอบ / มีนัดผู้ปกครอง', v => { const it=R.items.find(i=>i.id===iid);
+        it.ack='declined'; it.declNote=v; it.declAt=new Date().toISOString(); hist(R,'ขอเปลี่ยน',v); log('ขอเปลี่ยน', R.id, v); save(); closeModal(); toast('แจ้งผู้จัดให้จัดใหม่แล้ว'); render(); }); break;
+    case 'fixitem': { const clone = JSON.parse(JSON.stringify(R)); const it=clone.items.find(i=>i.id===iid); UI.fix={req:clone, iid, prevWho:ackWho(it)}; it.declinedBy=[...(it.declinedBy||[]), ackWho(it)]; it.method=null; UI.tab[iid]='sub'; renderFixModal(); break; }
+    case 'fixcancel': UI.fix=null; closeModal(); render(); break;
+    case 'fixsave': { const {req,iid:fi}=UI.fix; const orig=S.requests.find(x=>x.id===req.id); const ni=req.items.find(i=>i.id===fi); const idx=orig.items.findIndex(i=>i.id===fi);
+      orig.items[idx]=ni; hist(orig,'จัดใหม่',`${fmtD(ni.date)} คาบ ${ni.p} → ${METHODS[ni.method].label}`); log('จัดใหม่', orig.id, `${fmtD(ni.date)} คาบ ${ni.p}`); save(); UI.fix=null; toast('บันทึกแล้ว'); render(); openReq(orig.id); break; }
+    case 'approve': R.status='approved'; R.approvedAt=new Date().toISOString(); R.approvedBy=ME.name; hist(R,'เห็นชอบ — การจัดสอนแทนสมบูรณ์'); log('เห็นชอบ', R.id, ''); save(); toast('เห็นชอบแล้ว'); render(); renderDetail(); break;
+    case 'bulkapprove': { const ids=[...document.querySelectorAll('.apck:checked')].map(x=>x.value); if (!ids.length){ toast('ยังไม่ได้เลือกรายการ'); break; }
+      ids.forEach(id=>{ const r=S.requests.find(x=>x.id===id); r.status='approved'; r.approvedAt=new Date().toISOString(); r.approvedBy=ME.name; hist(r,'เห็นชอบ — การจัดสอนแทนสมบูรณ์'); log('เห็นชอบ', r.id, 'เห็นชอบแบบกลุ่ม'); });
+      save(); toast(`เห็นชอบ ${ids.length} รายการ`); render(); break; }
+    case 'return': promptModal('ส่งกลับแก้ไข','ระบุสิ่งที่ต้องแก้ไข', v => { R.status='returned'; R.returnNote=v; hist(R,'ส่งกลับแก้ไข',v); log('ส่งกลับแก้ไข', R.id, v); save(); closeModal(); toast('ส่งกลับแล้ว'); render(); }); break;
+    case 'editreq': { W={editId:R.id, req:JSON.parse(JSON.stringify(R)), start:R.dates[0], end:R.dates[R.dates.length-1]}; UI.open=null; closeModal(); VIEW='new'; render(); break; }
+    case 'cancelreq': if (confirm('ยกเลิกคำขอนี้? ครูที่ถูกจัดจะได้รับแจ้ง')){ R.status='cancelled'; hist(R,'ยกเลิกคำขอ'); log('ยกเลิก', R.id, ''); save(); toast('ยกเลิกแล้ว'); render(); renderDetail(); } break;
+    case 'printreq': printReq(R); break;
+    case 'ltab': UI.listTab=el.dataset.k; render(); break;
+    case 'aptab': UI.apTab=el.dataset.k; render(); break;
+    case 'bday': UI.board=el.dataset.d; render(); break;
+    case 'bprint': printBoard(el.dataset.d); break;
+    case 'ssort': UI.statSort=el.dataset.k; render(); break;
+    case 'person': personModal(+el.dataset.ti); break;
+    case 'csv': exportCSV(); break;
+  }
+});
+document.addEventListener('change', e => {
+  const t=e.target;
+  if (t.dataset.w){ const k=t.dataset.w, r=W.req;
+    if (k==='teacher'){ r.teacher=+t.value; if (r.teacher!==ME.ti && !isAcad()) r.type='sick'; regen(); render(); }
+    else if (k==='start'){ W.start=t.value; if (!W.end||W.end<W.start) W.end=W.start; regen(); render(); }
+    else if (k==='end'){ W.end=t.value; regen(); render(); }
+    else if (k==='reason') r.reason=t.value; else if (k==='file') r.file=t.value;
+    return; }
+  if (t.dataset.act==='bpick'){ UI.board=t.value; render(); return; }
+  if (t.dataset.s){ UI[t.dataset.s]=t.value; render(); return; }
+  if (t.dataset.set){ const st=S.settings, k=t.dataset.set;
+    if (k==='head') st.deptHeads[t.dataset.g]=+t.value; else if (k==='acad') st.acadHead = t.value===''?null:+t.value;
+    else if (k==='holidays') st.holidays=t.value.split(/\s+/).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x));
+    else if (k==='maxAhead'||k==='leadDays') st[k]=Math.max(0,parseInt(t.value)||0); else st[k]=t.value;
+    if (ME && ME.ti!=null){ const keep=ME.roles.includes('acad'); ME.roles=rolesOf(ME.ti); if (keep && !ME.roles.includes('acad')) ME.roles.push('acad','admin'); saveSess(); }
+    save(); toast('บันทึกการตั้งค่าแล้ว'); render(); }
+});
+document.addEventListener('input', e => { if (e.target.dataset.act==='logq'){ UI.logQ=e.target.value; const pos=e.target.selectionStart; render(); const i=document.querySelector('[data-act="logq"]'); i.focus(); i.setSelectionRange(pos,pos); } });
+
+/* ---------- boot ---------- */
+S = load(); if (!S) seed();
+ME = sess();
+render();
+</script>
+</body>
+</html>
