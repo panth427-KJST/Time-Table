@@ -42,6 +42,15 @@ var FakeGAS = (function () {
     H.forEach(function (x) { for (var k = 3; k >= 0; k--) { var v = (x >>> (k * 8)) & 255; out.push(v > 127 ? v - 256 : v); } });
     return out;
   }
+  function bytesOf(v) { return typeof v === 'string' ? utf8(v) : v.map(function (b) { return (b + 256) % 256; }); }
+  function unsign(a) { return a.map(function (b) { return (b + 256) % 256; }); }
+  function hmac256(msg, key) {
+    var k = bytesOf(key), m = bytesOf(msg);
+    if (k.length > 64) k = unsign(sha256(k));
+    while (k.length < 64) k = k.concat([0]);
+    var ip = k.map(function (b) { return b ^ 0x36; }), op = k.map(function (b) { return b ^ 0x5c; });
+    return sha256(op.concat(unsign(sha256(ip.concat(m)))));
+  }
   var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   function b64enc(bytes) {
     var s = '', u = bytes.map(function (b) { return (b + 256) % 256; });
@@ -95,7 +104,8 @@ var FakeGAS = (function () {
         getSheetByName: function (n) { return b.sheets[n] ? Sheet(b, n) : null; },
         insertSheet: function (n) { if (b.sheets[n]) throw new Error('มีชีตชื่อนี้แล้ว'); b.sheets[n] = []; return Sheet(b, n); },
         getSheets: function () { return Object.keys(b.sheets).map(function (n) { return Sheet(b, n); }); },
-        deleteSheet: function (s) { delete b.sheets[s.getName()]; }
+        deleteSheet: function (s) { delete b.sheets[s.getName()]; },
+        setSpreadsheetTimeZone: function () {}
       };
     }
     var cache = {
@@ -125,16 +135,18 @@ var FakeGAS = (function () {
         formatDate: fmt,
         getUuid: function () { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }); },
         computeDigest: function (alg, s) { if (alg === 'SHA_256') return sha256(utf8(String(s))); return []; },
+        computeHmacSha256Signature: function (value, key) { return hmac256(value, key); },
         base64Encode: b64enc,
         base64Decode: function () { return []; },
-        newBlob: function (bytes, mime, name) { return { name: name }; }
+        newBlob: function (data, mime, name) { return { name: name, getBytes: function () { return (typeof data === 'string' ? utf8(data) : data).map(function (b) { return b > 127 ? b - 256 : b; }); } }; }
       },
       HtmlService: {
         createHtmlOutputFromFile: function (n) { return { getContent: function () { return (opts.files || {})[n]; } }; },
         XFrameOptionsMode: { ALLOWALL: 'ALLOWALL' }
       },
       DriveApp: {
-        getFolderById: function (id) { return folder(id); }, createFolder: function () { return folder('FOLDER'); }
+        getFolderById: function (id) { return folder(id); }, createFolder: function () { return folder('FOLDER'); },
+        getFileById: function () { var done = false; return { getParents: function () { return { hasNext: function () { return !done; }, next: function () { done = true; return { createFolder: function () { return folder('SUB'); } }; } }; } }; }
       },
       MailApp: { sendEmail: function (m) { state.mails.push(m); } },
       ScriptApp: { getService: function () { return { getUrl: function () { return '#'; } }; } },
@@ -142,7 +154,7 @@ var FakeGAS = (function () {
       Logger: { log: function (m) { (opts.log || function () {})(m); } }
     };
     function folder(id) {
-      return { getId: function () { return id; }, createFile: function (blob) {
+      return { getId: function () { return id; }, createFolder: function () { return folder('SUB'); }, createFile: function (blob) {
         state.files++; var n = blob.name;
         return { getName: function () { return n; }, getUrl: function () { return '#file-' + state.files; } };
       } };

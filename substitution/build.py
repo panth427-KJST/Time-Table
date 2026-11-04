@@ -3,14 +3,15 @@
 สร้างไฟล์ทั้งหมดของระบบจัดสอนแทน (รันจากโฟลเดอร์ราก repo):
     python3 substitution/build.py
 
-อ่าน   Dashboard-2-2569.html             ตารางสอนครู/ตารางเรียนห้อง (แหล่งข้อมูลหลัก)
-       KJST_TimeTable_Studio_2-2569.html  ข้อมูลเวร + คาบพักกลางวัน
+อ่าน   substitution/data/timetable-db-2-2569.xlsx  ฐานข้อมูลตารางเรียนตารางสอน (แหล่งข้อมูลหลัก — ส่งไฟล์ใหม่มาแทนที่ไฟล์นี้)
+       Dashboard-2-2569.html             ใช้เฉพาะโลโก้ (และเป็นแหล่งสำรองถ้าไม่มีไฟล์ Excel)
+       KJST_TimeTable_Studio_2-2569.html  ข้อมูลเวร
        substitution/src/*                 โค้ดต้นฉบับ
 เขียน  substitution/gas/                  ไฟล์สำหรับวางใน Google Apps Script (Code.gs, Index.html, TimetableData.html, appsscript.json)
        substitution/data/timetable-2-2569.json
        substitution/Substitution-Demo-2-2569.html   โหมดทดลอง (โค้ดชุดเดียวกับของจริง ทำงานในเบราว์เซอร์)
 """
-import base64, io, json, re
+import base64, io, json, re, subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -41,6 +42,25 @@ def small_logo(uri, size=96):
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+XLSX = HERE / "data" / "timetable-db-2-2569.xlsx"
+
+
+def timetable_excel(prev):
+    """อ่านไฟล์ Excel แล้วแปลงด้วย src/importer.js (ตัวเดียวกับที่หน้าเว็บใช้)"""
+    import openpyxl
+    wb = openpyxl.load_workbook(XLSX, read_only=True, data_only=True)
+    sheet = lambda key: next(wb[n] for n in wb.sheetnames if key in n.replace(" ", ""))
+    aoa = lambda ws: [[c for c in r] for r in ws.iter_rows(values_only=True)]
+    payload = json.dumps({"t": aoa(sheet("ตารางสอน")), "c": aoa(sheet("ตารางเรียน")), "prev": prev}, ensure_ascii=False, default=str)
+    js = ("const I=require(process.argv[1]);let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d).on('end',()=>{"
+          "const a=JSON.parse(s);const r=I.fromRows(a.t,a.c,a.prev);process.stdout.write(JSON.stringify(r));});")
+    out = subprocess.run(["node", "-e", js, str(SRC / "importer.js")], input=payload.encode(), capture_output=True, check=True)
+    res = json.loads(out.stdout)
+    for w in res["warnings"]:
+        print("  คำเตือน:", w)
+    return res["D"]
+
+
 def timetable():
     dash = embedded_json(ROOT / "Dashboard-2-2569.html")
     studio = embedded_json(ROOT / "KJST_TimeTable_Studio_2-2569.html")
@@ -60,6 +80,9 @@ def timetable():
          "groups": groups, "noCover": NO_COVER, "activity": ACTIVITY, "lunch": studio.get("lunch", {}),
          "teachers": [{"n": n, "g": groups.index(dash["teacher_groups"][n])} for n in names],
          "classes": classes, "ts": ts, "cs": cs, "duty": duty}
+    if XLSX.exists():
+        D = timetable_excel(D)
+        D["term"] = "2/2569"; D["source"] = XLSX.name
     return D, small_logo(dash.get("logo", ""))
 
 
@@ -77,24 +100,25 @@ def main():
     server = (SRC / "server.js").read_text(encoding="utf-8")
     client = (SRC / "client.html").read_text(encoding="utf-8")
     fake = (SRC / "fakegas.js").read_text(encoding="utf-8")
+    importer = (SRC / "importer.js").read_text(encoding="utf-8")
     demo = (SRC / "demo_boot.js").read_text(encoding="utf-8")
     client = client.replace("'/*__LOGO__*/'", json.dumps(logo))
 
     gas = HERE / "gas"; gas.mkdir(exist_ok=True)
     banner = "/* สร้างอัตโนมัติจาก substitution/src — อย่าแก้ไฟล์นี้โดยตรง (แก้ที่ src แล้วรัน build.py) */\n"
-    (gas / "Code.gs").write_text(banner + engine + "\n\n" + server, encoding="utf-8")
-    (gas / "Index.html").write_text(client.replace("<script>/*__ENGINE__*/</script>", "<script>\n" + js_safe(engine) + "\n</script>"), encoding="utf-8")
+    (gas / "Code.gs").write_text(banner + engine + "\n\n" + importer + "\n\n" + server, encoding="utf-8")
+    (gas / "Index.html").write_text(client.replace("<script>/*__ENGINE__*/</script>", "<script>\n" + js_safe(engine) + "\n" + js_safe(importer) + "\n</script>"), encoding="utf-8")
     (gas / "TimetableData.html").write_text(tt_json, encoding="utf-8")
     (gas / "appsscript.json").write_text(json.dumps({
         "timeZone": "Asia/Bangkok", "dependencies": {}, "exceptionLogging": "STACKDRIVER", "runtimeVersion": "V8",
         "webapp": {"executeAs": "USER_DEPLOYING", "access": "ANYONE_ANONYMOUS"}}, indent=2), encoding="utf-8")
 
     scripts = "".join(f"<script>\n{js_safe(x)}\n</script>\n" for x in [
-        engine, fake, server, "window.__TT__ = " + tt_json + ";", demo])
+        engine, importer, fake, server, "window.__TT__ = " + tt_json + ";", demo])
     html = client.replace("<script>/*__ENGINE__*/</script>", scripts).replace(
         "<title>ระบบจัดสอนแทน KJST</title>", "<title>ระบบจัดสอนแทน KJST (ทดลอง)</title>")
     (HERE / "Substitution-Demo-2-2569.html").write_text(html, encoding="utf-8")
-    print(f"teachers={len(D['teachers'])} classes={len(D['classes'])} · gas/Code.gs {len(engine+server)//1024} KB · "
+    print(f"source={D['source']} teachers={len(D['teachers'])} classes={len(D['classes'])} · gas/Code.gs {len(engine+server)//1024} KB · "
           f"gas/Index.html · demo {len(html)//1024} KB")
 
 

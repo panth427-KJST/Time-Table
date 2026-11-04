@@ -10,7 +10,7 @@ function ok(cond, name, extra) { if (cond) { pass++; console.log('  ✓ ' + name
 function boot() {
   const F = FakeGAS.create({ files: { TimetableData: JSON.stringify(TT) } });
   const ctx = vm.createContext(Object.assign({ console }, F.globals));
-  for (const f of ['engine.js', 'server.js', 'demo_boot.js']) vm.runInContext(fs.readFileSync(path.join(SRC, f), 'utf8'), ctx, { filename: f });
+  for (const f of ['engine.js', 'importer.js', 'server.js', 'demo_boot.js']) vm.runInContext(fs.readFileSync(path.join(SRC, f), 'utf8'), ctx, { filename: f });
   ctx.F = F;
   return ctx;
 }
@@ -193,7 +193,7 @@ for (const t of teachersOn(d1)) {
     const req = { id: '(t)', type: 'official', teacher: t, dates: [d1], slots: { [d1]: [it0.p] }, status: 'open', items: [it0] };
     const sT = E.candSwapT(req, it0).list[0], sF = E.candSwapF(req, it0).list[0];
     if (!sT || !sF) continue;
-    const bad = { type: 'official', teacher: t, dates: [d1], slots: { [d1]: [it0.p] }, items: [{ id: it0.id, method: 'swapT', swap: { t: sT.t, date: d1, p: sT.p } }] };   // สลับไปวันที่ตัวเองลา = ผิด
+    const bad = { type: 'official', teacher: t, dates: [d1], slots: { [d1]: [it0.p] }, items: [{ id: it0.id, method: 'swapT', swap: { t: sT.t, date: d1, p: it0.p } }] };   // สลับไปคาบที่ตัวเองลา = ผิด
     const rb = H.apiSubmit(tok(t), bad);
     const good = { type: 'official', teacher: t, dates: [d1], slots: { [d1]: [it0.p] }, items: [{ id: it0.id, method: 'swapT', swap: sT }] };
     const rg = H.apiSubmit(tok(t), good);
@@ -231,6 +231,69 @@ ok(r.ok && r.result.slots === 2059, 'นำเข้าตารางสอน�
 ok(H.ctx_().requests.length > 0, 'ข้อมูลการจัดสอนแทนเดิมยังอยู่หลังนำเข้าตาราง');
 r = H.apiGetLog(bossTok, 'เห็นชอบ');
 ok(r.ok && r.rows.length >= 1, 'ค้นหาบันทึกระบบ');
+
+/* ---------------------------------------------------------------- 8. ชีต Users รูปแบบ e-Score จริง */
+console.log('8) e-Score จริง: PBKDF2, รหัสครู/อีเมล, บทบาทอัตโนมัติ');
+const K = boot();
+K.F.addBook('DB', {});
+const hdr = ['teacher_id', 'email', 'prefix', 'first_name', 'last_name', 'display_name', 'roles', 'subject_group', 'department', 'position',
+  'seniority', 'password_hash', 'salt', 'must_change_password', 'is_active', 'last_login', 'created_at'];
+const salt = 'a3f1c2d4e5b6978812aa34bc56de78f0';
+const hp = pw => K.pbkdf2_(pw, salt, 500, 32);
+const urow = (id, email, pre, f, l, roles, sg, dept, pos, pw, mc, act) => [id, email, pre, f, l, 'ครู' + f + ' ' + l, roles, sg, dept, pos, '', hp(pw), salt, mc || 'FALSE', act || 'TRUE', '', ''];
+K.F.addBook('ESC2', { Users: [hdr,
+  urow('T999', 'panth427@kjst.ac.th', 'นาย', 'ธนพันธ์', 'เพ็งสวัสดิ์', 'admin', '', '', 'ผู้ดูแลระบบ', 'adminpw'),
+  urow('T304', 'panth427@kjst.ac.th', 'นาย', 'ธนพันธ์', 'เพ็งสวัสดิ์', 'teacher,measurement', 'วิทยาศาสตร์และเทคโนโลยี', 'วิชาการ', 'หัวหน้ากลุ่ม', 'teachpw'),
+  urow('T339', 'n66@kjst.ac.th', 'นางสาว', 'นฤมล', 'มุจจลินทร์', 'teacher', 'วิทยาศาสตร์และเทคโนโลยี', '', 'หัวหน้ากลุ่มสาระ', 'x12345'),
+  urow('T423', 'p@kjst.ac.th', 'นาย', 'ภัทรภูมิ', 'บุญเพียง', 'teacher', 'สังคมศึกษา ศาสนาและวัฒนธรรม', 'วิชาการ', 'หัวหน้ากลุ่มสาระ', 'x12345'),
+  urow('T839', '', 'นางสาว', 'สิริกานต์', 'สุขศรีเมือง', 'teacher', 'ภาษาต่างประเทศ', '', '', 'x12345'),
+  urow('T519', '', 'สิบเอก', 'โรจน์ศักดิ์', 'แก้้วส่งแสง', 'teacher', 'สุขศึกษาและพลศึกษา', '', '', 'KJST_T519', 'TRUE'),
+  urow('T302', 'aree@kjst.ac.th', 'นาง', 'อารี', 'อนันต์ศรี', 'teacher', 'วิทยาศาสตร์และเทคโนโลยี', 'งบประมาณและสินทรัพย์', 'หัวหน้ากลุ่ม', 'x12345'),
+  urow('T777', 'old@kjst.ac.th', 'นาย', 'ปิยวัฒน์', 'สาลี', 'teacher', 'วิทยาศาสตร์และเทคโนโลยี', '', '', 'x12345', 'FALSE', 'FALSE')] });
+K.setup();
+K.saveSettings_({ ESCORE_SPREADSHEET_ID: 'ESC2' });
+ok(K.settings_().ESCORE_PBKDF2_ITER === '500' && K.settings_().ESCORE_SPREADSHEET_ID === 'ESC2', 'ค่าเริ่มต้น PBKDF2 500 รอบ');
+ok(K.pbkdf2_('password', 'salt', 4096, 32) === 'c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a', 'PBKDF2 ตรง test vector RFC');
+r = K.apiLogin('T304', 'wrong');
+ok(!r.ok, 'รหัสผิด → ปฏิเสธ');
+r = K.apiLogin('t304', 'teachpw');
+ok(r.ok && r.me.name === 'นายธนพันธ์ เพ็งสวัสดิ์' && r.me.roles.includes('acad') && !r.me.roles.includes('admin'), 'รหัสครู T304 → ครูในตาราง + หัวหน้าวิชาการ (จากตำแหน่ง)', JSON.stringify(r.me));
+r = K.apiLogin('panth427@kjst.ac.th', 'adminpw');
+ok(r.ok && r.me.username === 'T999' && r.me.roles.includes('admin'), 'อีเมลซ้ำ 2 บัญชี → เลือกบัญชีที่รหัสตรง (T999 admin)');
+r = K.apiLogin('PANTH427@kjst.ac.th', 'teachpw');
+ok(r.ok && r.me.username === 'T304', 'อีเมลซ้ำ → รหัสของ T304 เข้าบัญชี T304');
+r = K.apiLogin('T302', 'x12345');
+ok(r.ok && !r.me.roles.includes('acad'), 'หัวหน้ากลุ่มงบประมาณ ไม่ได้สิทธิ์หัวหน้าวิชาการ');
+r = K.apiLogin('T339', 'x12345');
+ok(r.ok && r.me.roles.includes('dept') && r.me.headGroups.includes(2), 'หัวหน้ากลุ่มสาระวิทย์ฯ จากตำแหน่งใน e-Score');
+r = K.apiLogin('T423', 'x12345');
+ok(r.ok && r.me.ti === null && r.me.headGroups.includes(3), 'หัวหน้ากลุ่มสาระสังคมฯ (ไม่อยู่ในตารางสอน, ชื่อกลุ่มเว้นวรรคต่าง) ยังได้สิทธิ์', JSON.stringify(r.me));
+r = K.apiLogin('T839', 'x12345');
+ok(r.ok && r.me.name === 'นางสาวศิริกานต์ สุขศรีเมือง', 'ชื่อสะกดต่าง (สิริกานต์/ศิริกานต์) จับคู่ได้', r.me && r.me.name);
+r = K.apiLogin('T519', 'KJST_T519');
+ok(r.ok && r.me.name === 'สิบเอกโรจน์ศักดิ์ แก้วส่งแสง' && r.me.mustChange, 'วรรณยุกต์ซ้ำ (แก้้ว) จับคู่ได้ + เตือนยังใช้รหัสเริ่มต้น');
+r = K.apiLogin('T777', 'x12345');
+ok(!r.ok && /ระงับ/.test(r.error), 'is_active = FALSE → เข้าไม่ได้');
+const acadTok = K.apiLogin('T304', 'teachpw').token;
+r = K.apiAdmin(acadTok);
+ok(r.ok && r.escore.cols.username === 'teacher_id' && r.escore.cols.password === 'password_hash' && r.escore.cols.salt === 'salt', 'ตรวจคอลัมน์ e-Score อัตโนมัติ', JSON.stringify(r.escore.cols));
+ok(r.escore.heads['วิทยาศาสตร์และเทคโนโลยี'].name === 'นางสาวนฤมล มุจจลินทร์', 'หัวหน้ากลุ่มสาระที่อ่านจาก e-Score');
+ok(r.users.find(u => u.username === 'T839').via === 'fuzzy', 'แสดงว่าเป็นการจับคู่ชื่อใกล้เคียง');
+r = K.apiBootstrap(acadTok);
+ok(r.ok && r.settings.deptHeads[2] === K.ctx_().D.teachers.findIndex(t => t.n === 'นางสาวนฤมล มุจจลินทร์'), 'หน้าเว็บรู้จักหัวหน้ากลุ่มสาระจาก e-Score');
+K.saveSettings_({ DEPT_HEADS: JSON.stringify({ 'วิทยาศาสตร์และเทคโนโลยี': 'นางปราถนา อินทวิเศษ' }) });
+ok(!K.apiLogin('T339', 'x12345').me.roles.includes('dept'), 'กำหนดหัวหน้ากลุ่มในระบบ → แทนค่าจาก e-Score');
+
+/* ---------------------------------------------------------------- 9. นำเข้า Excel */
+console.log('9) นำเข้าไฟล์ Excel');
+const AOA = process.env.AOA ? JSON.parse(fs.readFileSync(process.env.AOA, 'utf8')) : null;
+if (AOA) {
+  const TTImport = require(path.join(SRC, 'importer.js'));
+  const res = TTImport.fromRows(AOA.t, AOA.c, TT);
+  ok(res.warnings.length === 0 && res.summary.teachers === 77 && res.summary.slots === 2060, 'อ่าน Excel: ครู 77 คน 2060 คาบ ไม่มีคำเตือน', JSON.stringify(res.summary));
+  r = K.apiImportTimetable(acadTok, res.D);
+  ok(r.ok && r.result.slots === 2060, 'นำเข้า Excel ผ่าน API');
+} else console.log('  (ข้าม — ตั้ง AOA=ไฟล์ json เพื่อทดสอบ)');
 
 console.log(`\nผ่าน ${pass} · ไม่ผ่าน ${fail}`);
 process.exit(fail ? 1 : 0);

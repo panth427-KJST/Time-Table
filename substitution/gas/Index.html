@@ -594,6 +594,130 @@ var SubEngine = (function () {
 })();
 if (typeof module !== 'undefined') module.exports = SubEngine;
 
+/* =====================================================================
+   TTImport — แปลงไฟล์ Excel "ฐานข้อมูลตารางเรียนตารางสอน" เป็นข้อมูลตารางสอนของระบบ
+   ใช้ทั้งหน้าเว็บ (นำเข้าในหน้าตั้งค่า) และ build.py (ผ่าน node)
+   ต้องมี 2 ชีต:
+     ฐานข้อมูลตารางสอน : ชื่อ-สกุล | กลุ่มสาระ | วัน | คาบ | เวลา | รหัสวิชา | ชื่อวิชา | ชั้นที่สอน | ห้อง | ประเภทคาบ
+     ฐานข้อมูลตารางเรียน: ชั้นเรียน | วัน | คาบ | เวลา | รหัสวิชา | ชื่อวิชา | ครูผู้สอน | ห้อง | สถานะ | กลุ่มสาระ
+   ===================================================================== */
+var TTImport = (function () {
+  'use strict';
+  var GROUP_ORDER = ['ภาษาไทย', 'คณิตศาสตร์', 'วิทยาศาสตร์และเทคโนโลยี', 'สังคมศึกษา ศาสนา และวัฒนธรรม',
+    'สุขศึกษาและพลศึกษา', 'ศิลปะ', 'การงานอาชีพ', 'ภาษาต่างประเทศ', 'กิจกรรมพัฒนาผู้เรียน'];
+  var ALIAS = { 'วิทยาศาสตร์ฯ': 2, 'วิทยาศาสตร์': 2, 'สังคมศึกษาฯ': 3, 'สังคมศึกษา': 3, 'สุขศึกษาฯ': 4, 'สุขศึกษา': 4,
+    'การงานฯ': 6, 'กิจกรรมแนะแนว': 8, 'แนะแนว': 8, 'กิจกรรมฯ': 8 };
+  var DAYS = ['วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์'];
+  var squash = function (s) { return String(s || '').replace(/\s+/g, ''); };
+
+  function groupIndex(name) {
+    var s = squash(name); if (!s) return -1;
+    for (var i = 0; i < GROUP_ORDER.length; i++) if (squash(GROUP_ORDER[i]) === s) return i;
+    if (ALIAS[String(name).trim()] != null) return ALIAS[String(name).trim()];
+    for (i = 0; i < GROUP_ORDER.length; i++) if (squash(GROUP_ORDER[i]).indexOf(s.replace('ฯ', '')) === 0) return i;
+    return -1;
+  }
+  function dayIndex(v) {
+    var s = String(v || '').trim(); if (s.indexOf('วัน') !== 0) s = 'วัน' + s;
+    return DAYS.indexOf(s);
+  }
+  function periodIndex(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (/^HR$/i.test(s) || s === '0') return 0;
+    var m = s.match(/(\d+)/); return m ? +m[1] : -1;
+  }
+  function cols(header, want) {
+    var h = header.map(function (x) { return squash(x); }), out = {};
+    Object.keys(want).forEach(function (k) {
+      var i = -1;
+      want[k].some(function (n) { i = h.indexOf(squash(n)); return i >= 0; });
+      out[k] = i;
+    });
+    return out;
+  }
+  var str = function (v) { return v == null ? '' : String(v).trim(); };
+
+  /* teach, cls: array of rows (แถวแรกเป็นหัวตาราง) · prev: ข้อมูลเดิม (คงเวร/คาบไม่ต้องจัด) */
+  function fromRows(teach, cls, prev) {
+    prev = prev || {};
+    var warn = [];
+    var ct = cols(teach[0], { name: ['ชื่อ-สกุล', 'ชื่อสกุล', 'ครู'], group: ['กลุ่มสาระ'], day: ['วัน'], period: ['คาบ'], time: ['เวลา'],
+      code: ['รหัสวิชา'], subj: ['ชื่อวิชา'], cls: ['ชั้นที่สอน', 'ชั้นเรียน', 'ห้องเรียน'], room: ['ห้อง'], kind: ['ประเภทคาบ', 'สถานะ'] });
+    ['name', 'day', 'period', 'code'].forEach(function (k) { if (ct[k] < 0) throw new Error('ชีตตารางสอนไม่มีคอลัมน์ ' + k); });
+    var cc = cols(cls[0], { cls: ['ชั้นเรียน', 'ห้องเรียน', 'ชั้น'], day: ['วัน'], period: ['คาบ'], time: ['เวลา'], code: ['รหัสวิชา'],
+      subj: ['ชื่อวิชา'], teachers: ['ครูผู้สอน', 'ครู'], room: ['ห้อง'], status: ['สถานะ'] });
+    ['cls', 'day', 'period'].forEach(function (k) { if (cc[k] < 0) throw new Error('ชีตตารางเรียนไม่มีคอลัมน์ ' + k); });
+
+    var times = (prev.times || []).slice(), teachers = [], tIdx = {}, ts = [];
+    teach.slice(1).forEach(function (r) {
+      var n = str(r[ct.name]); if (!n) return;
+      if (tIdx[n] == null) {
+        var g = groupIndex(r[ct.group]);
+        if (g < 0) { warn.push('ไม่รู้จักกลุ่มสาระ "' + str(r[ct.group]) + '" ของ ' + n + ' (จัดเป็นกิจกรรมพัฒนาผู้เรียน)'); g = 8; }
+        tIdx[n] = teachers.length; teachers.push({ n: n, g: g }); ts.push([]);
+      }
+      var d = dayIndex(r[ct.day]), p = periodIndex(r[ct.period]);
+      if (d < 0 || p < 0 || p > 9) return;
+      if (ct.time >= 0 && str(r[ct.time])) times[p] = str(r[ct.time]);
+      var code = str(r[ct.code]);
+      if (!code) return;                                    // ว่าง
+      ts[tIdx[n]].push([d, p, code, str(r[ct.subj]), str(r[ct.cls]), str(r[ct.room])]);
+    });
+    var cs = {}, classes = [], lunch = {};
+    cls.slice(1).forEach(function (r) {
+      var c = str(r[cc.cls]); if (!c) return;
+      if (!cs[c]) { cs[c] = []; classes.push(c); }
+      var d = dayIndex(r[cc.day]), p = periodIndex(r[cc.period]);
+      if (d < 0 || p < 0 || p > 9) return;
+      if (cc.time >= 0 && str(r[cc.time]) && !times[p]) times[p] = str(r[cc.time]);
+      var status = cc.status >= 0 ? str(r[cc.status]) : '', code = str(r[cc.code]);
+      if (status === 'ว่าง' || (!code && !status)) return;
+      if (status === 'พักกลางวัน' || code === 'พักกลางวัน') {
+        var lv = (c.match(/^ม\.\d/) || [''])[0]; if (lv) lunch[lv] = p;
+        code = 'พักกลางวัน';
+      }
+      var tis = str(r[cc.teachers]).split(/\s*,\s*/).filter(String).map(function (n) {
+        if (tIdx[n] == null) { warn.push('ตารางเรียน ' + c + ': ไม่พบครู "' + n + '" ในชีตตารางสอน'); return null; }
+        return tIdx[n];
+      }).filter(function (x) { return x != null; });
+      cs[c].push([d, p, code || status, str(r[cc.subj]) || status, tis, str(r[cc.room])]);
+    });
+    // ห้องที่ครูสอนแต่ไม่อยู่ในตารางสอนของครู (ตรวจความสอดคล้อง)
+    var seen = {};
+    ts.forEach(function (rows, ti) { rows.forEach(function (x) {
+      if (cs[x[4]] && x[0] != null) {
+        var ok = cs[x[4]].some(function (y) { return y[0] === x[0] && y[1] === x[1]; });
+        var k = x[4] + x[0] + '-' + x[1];
+        if (!ok && !seen[k]) { seen[k] = 1; warn.push('ไม่สอดคล้อง: ' + teachers[ti].n + ' สอน ' + x[4] + ' ' + DAYS[x[0]] + ' คาบ ' + x[1] + ' แต่ตารางเรียนห้องนั้นว่าง'); }
+      }
+    }); });
+    // เวร: คงของเดิมตามชื่อครู
+    var duty = {};
+    if (prev.duty && prev.teachers) Object.keys(prev.duty).forEach(function (ti) {
+      var t = prev.teachers[ti]; if (t && tIdx[t.n] != null) duty[tIdx[t.n]] = prev.duty[ti];
+    });
+    for (var p = 0; p <= 9; p++) if (!times[p]) times[p] = '';
+    return {
+      D: { term: prev.term || '', source: 'Excel ฐานข้อมูลตารางเรียนตารางสอน', days: DAYS.slice(), times: times, groups: GROUP_ORDER.slice(),
+        noCover: prev.noCover || ['HR', 'MEET', 'PLC', 'ประชุม'], activity: prev.activity || ['ชุมนุม', 'ลูกเสือ'],
+        lunch: Object.keys(lunch).length ? lunch : (prev.lunch || {}), teachers: teachers, classes: classes, ts: ts, cs: cs, duty: duty },
+      warnings: warn,
+      summary: { teachers: teachers.length, classes: classes.length, slots: ts.reduce(function (s, x) { return s + x.length; }, 0) }
+    };
+  }
+
+  /* หน้าเว็บ: workbook จาก SheetJS */
+  function fromWorkbook(XLSX, wb, prev) {
+    var find = function (re) { var n = wb.SheetNames.filter(function (s) { return re.test(s.replace(/\s/g, '')); })[0]; return n && wb.Sheets[n]; };
+    var t = find(/ตารางสอน/), c = find(/ตารางเรียน/);
+    if (!t || !c) throw new Error('ไม่พบชีต “ฐานข้อมูลตารางสอน” และ “ฐานข้อมูลตารางเรียน” ในไฟล์');
+    var aoa = function (s) { return XLSX.utils.sheet_to_json(s, { header: 1, raw: false, defval: null }); };
+    return fromRows(aoa(t), aoa(c), prev);
+  }
+  return { fromRows: fromRows, fromWorkbook: fromWorkbook, groupIndex: groupIndex, GROUP_ORDER: GROUP_ORDER };
+})();
+if (typeof module !== 'undefined') module.exports = TTImport;
+
 </script>
 <script>
 "use strict";
@@ -733,6 +857,7 @@ function render(){
         <span style="min-width:0;text-align:left"><div class="nm">${esc(ME.name)}</div><div class="rl">${esc(roleText())}</div></span></button>
     </div></div></header>
   ${window.DEMO?`<div class="demo-bar"><div class="in"><b>โหมดทดลอง</b><span class="muted">ระบบเดียวกับของจริง แต่บันทึกข้อมูลในเบราว์เซอร์นี้เท่านั้น · ตารางสอนจริง 2/2569</span><span class="sp"></span><button class="btn sm" data-act="logout">สลับผู้ใช้</button><button class="btn sm" data-act="demoreset">ล้างข้อมูลทดลอง</button></div></div>`:''}
+  ${ME.mustChange?`<div class="demo-bar" style="background:var(--warn-bg)"><div class="in">บัญชีนี้ยังใช้รหัสผ่านเริ่มต้น — กรุณาเข้าระบบ e-Score เพื่อเปลี่ยนรหัสผ่าน</div></div>`:''}
   ${ME.ti==null && !isPriv()?`<div class="demo-bar" style="background:var(--warn-bg)"><div class="in">บัญชี e-Score นี้ยังไม่ได้จับคู่กับรายชื่อครูในตารางสอน — แจ้งผู้ดูแลระบบให้จับคู่ในหน้าตั้งค่า</div></div>`:''}
   <nav class="tabs"><div class="tabs-in">${tabsFor().map(([k,l,i,c])=>`<button class="tab ${VIEW===k?'on':''}" data-go="${k}">${ICON[i]}${l}${c?`<span class="c">${c}</span>`:''}</button>`).join('')}</div></nav>
   <main id="main">${views[VIEW]()}</main>`;
@@ -747,7 +872,7 @@ function renderLogin(){
       <h3 style="font-size:16px;margin-bottom:2px">เข้าสู่ระบบ</h3>
       <p class="small muted" style="margin:0 0 14px">ใช้ชื่อผู้ใช้และรหัสผ่านเดียวกับระบบ e-Score</p>
       <form id="lf">
-      <div class="field"><label class="f">ชื่อผู้ใช้</label><input type="text" id="lu" autocomplete="username" required></div>
+      <div class="field"><label class="f">รหัสครู (เช่น T304) หรืออีเมล</label><input type="text" id="lu" autocomplete="username" required></div>
       <div class="field"><label class="f">รหัสผ่าน</label><input type="password" id="lp" autocomplete="current-password" required></div>
       <div id="lerr"></div>
       <button class="btn pri" style="width:100%;justify-content:center;padding:10px" type="submit">เข้าสู่ระบบ</button>
@@ -1159,6 +1284,7 @@ function vSettings(){
   if (!UI.admin){ call('apiAdmin').then(r=>{ UI.admin = r.ok ? r : {error:r.error}; if (VIEW==='settings') render(); }); return '<div class="empty">กำลังโหลด…</div>'; }
   if (UI.admin.error) return `<div class="note bad">${esc(UI.admin.error)}</div>`;
   const s = UI.admin.settings, heads = (()=>{ try { return JSON.parse(s.DEPT_HEADS||'{}'); } catch(e){ return {}; } })();
+  const esHeads = (UI.admin.escore && UI.admin.escore.heads) || {};
   const tOpts = (g, sel) => '<option value="">— ยังไม่กำหนด —</option>' + D.teachers.map((t,ti)=>({t,ti})).filter(x=>(g==null||x.t.g===g)&&D.ts[x.ti].length).map(x=>`<option ${x.t.n===sel?'selected':''}>${esc(x.t.n)}</option>`).join('');
   const inp = (k, label, type='text', note='') => `<div class="field"><label class="f">${label}</label><input type="${type}" data-cfg="${k}" value="${esc(s[k])}">${note?`<div class="tiny muted" style="margin-top:3px">${note}</div>`:''}</div>`;
   const es = UI.admin.escore;
@@ -1173,32 +1299,43 @@ function vSettings(){
         <div class="field"><label class="f">วันหยุด (ไม่นับเป็นวันเรียน)</label><textarea data-cfg="HOLIDAYS" style="min-height:90px">${esc(String(s.HOLIDAYS||'').split(',').join('\n'))}</textarea><div class="tiny muted">หนึ่งบรรทัดต่อหนึ่งวัน รูปแบบ ค.ศ. YYYY-MM-DD</div></div>
       </div></div>
       <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>หัวหน้ากลุ่มสาระการเรียนรู้</h3><span class="small muted">จัดสอนแทนกรณีลาป่วยให้ครูในกลุ่มได้</span></div><div class="card-b">
-        ${D.groups.map((g,i)=>`<div class="field"><label class="f">${esc(g)}</label><select data-head="${esc(g)}">${tOpts(i, heads[g])}</select></div>`).join('')}
+        ${D.groups.map((g,i)=>{ const eh = esHeads[g] && esHeads[g].via==='escore' ? esHeads[g].name : '';
+          return `<div class="field"><label class="f">${esc(g)}</label><select data-head="${esc(g)}">${tOpts(i, heads[g]).replace('— ยังไม่กำหนด —', eh ? 'ตาม e-Score: '+esc(eh) : '— ยังไม่กำหนด —')}</select></div>`; }).join('')}
+        <div class="tiny muted">ค่าเริ่มต้นอ่านจาก e-Score (ตำแหน่ง “หัวหน้ากลุ่มสาระ” + กลุ่มสาระ) — เลือกชื่อเพื่อกำหนดแทน</div>
       </div></div>
     </div>
     <div>
       <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>บทบาท</h3></div><div class="card-b">
-        ${inp('ACAD_USERS','ชื่อผู้ใช้ e-Score ของหัวหน้ากลุ่มบริหารงานวิชาการ','text','คั่นหลายคนด้วยจุลภาค · มีสิทธิ์เห็นชอบ/ส่งกลับ/ตั้งค่า')}
-        ${inp('ADMIN_USERS','ชื่อผู้ใช้ e-Score ของผู้ดูแลระบบ','text','คั่นด้วยจุลภาค · ตั้งค่า/นำเข้าตารางสอน/ดูบันทึก')}
+        <div class="field"><label class="f">กำหนดบทบาทอัตโนมัติจาก e-Score</label><select data-cfg="ESCORE_AUTO_ROLES"><option value="on" ${s.ESCORE_AUTO_ROLES!=='off'?'selected':''}>เปิด</option><option value="off" ${s.ESCORE_AUTO_ROLES==='off'?'selected':''}>ปิด</option></select>
+          <div class="tiny muted" style="margin-top:3px">เปิด: roles=admin → ผู้ดูแล · ตำแหน่ง “หัวหน้ากลุ่ม” ฝ่ายวิชาการ → หัวหน้ากลุ่มบริหารงานวิชาการ · “หัวหน้ากลุ่มสาระ” → หัวหน้ากลุ่มสาระฯ</div></div>
+        ${inp('ACAD_USERS','เพิ่มหัวหน้ากลุ่มบริหารงานวิชาการ (รหัสครู)','text','คั่นหลายคนด้วยจุลภาค · มีสิทธิ์เห็นชอบ/ส่งกลับ/ตั้งค่า')}
+        ${inp('ADMIN_USERS','เพิ่มผู้ดูแลระบบ (รหัสครู)','text','คั่นด้วยจุลภาค · ตั้งค่า/นำเข้าตารางสอน/ดูบันทึก')}
       </div></div>
       <div class="card" style="margin-bottom:14px"><div class="card-h"><h3>เชื่อมต่อ e-Score</h3>${es.ok?`<span class="chip s-approved">เชื่อมต่อแล้ว · ผู้ใช้ ${es.count} บัญชี</span>`:`<span class="chip s-fix">ยังเชื่อมต่อไม่ได้</span>`}</div><div class="card-b">
         ${es.ok?`<div class="small muted" style="margin-bottom:10px">คอลัมน์ที่ใช้: ชื่อผู้ใช้ <b>${esc(es.cols.username)}</b> · รหัสผ่าน <b>${esc(es.cols.password)}</b> · ชื่อ <b>${esc(es.cols.name||'-')}</b> · อีเมล <b>${esc(es.cols.email||'-')}</b></div>`:`<div class="note bad" style="margin-bottom:10px">${esc(es.error)}</div>`}
         ${inp('ESCORE_SPREADSHEET_ID','ID ของ Google Sheet e-Score','text','คัดลอกจาก URL ส่วนระหว่าง /d/ กับ /edit')}
         <div class="grid g2" style="gap:0 12px">${inp('ESCORE_USERS_SHEET','ชื่อชีตผู้ใช้')}
-        <div class="field"><label class="f">รูปแบบรหัสผ่าน</label><select data-cfg="ESCORE_HASH">${['auto','plain','sha256','md5'].map(x=>`<option ${s.ESCORE_HASH===x?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label class="f">รูปแบบรหัสผ่าน</label><select data-cfg="ESCORE_HASH">${['auto','pbkdf2','plain','sha256','md5'].map(x=>`<option ${s.ESCORE_HASH===x?'selected':''}>${x}</option>`).join('')}</select></div>
         ${inp('ESCORE_COL_USERNAME','คอลัมน์ชื่อผู้ใช้ (ว่าง=อัตโนมัติ)')}${inp('ESCORE_COL_PASSWORD','คอลัมน์รหัสผ่าน (ว่าง=อัตโนมัติ)')}
-        ${inp('ESCORE_COL_NAME','คอลัมน์ชื่อ-สกุล (ว่าง=อัตโนมัติ)')}${inp('ESCORE_COL_EMAIL','คอลัมน์อีเมล (ถ้ามี)')}</div>
+        ${inp('ESCORE_COL_NAME','คอลัมน์ชื่อ-สกุล (ว่าง=อัตโนมัติ)')}${inp('ESCORE_COL_EMAIL','คอลัมน์อีเมล (ถ้ามี)')}
+        ${inp('ESCORE_PBKDF2_ITER','จำนวนรอบ PBKDF2 (ตรงกับ e-Score)','number')}</div>
         <div class="field"><label class="f">ส่งอีเมลแจ้งเตือน</label><select data-cfg="NOTIFY_EMAIL"><option value="off" ${s.NOTIFY_EMAIL!=='on'?'selected':''}>ปิด</option><option value="on" ${s.NOTIFY_EMAIL==='on'?'selected':''}>เปิด (ต้องมีคอลัมน์อีเมล)</option></select></div>
       </div></div>
     </div>
   </div>
   <div class="card" style="margin-top:14px"><div class="card-h"><h3>จับคู่บัญชี e-Score กับรายชื่อครูในตารางสอน</h3><span class="small muted">${UI.admin.users.length} บัญชี · ${unmatched?`<b style="color:var(--bad)">ยังไม่จับคู่ ${unmatched}</b>`:'จับคู่ครบ'} · จับคู่อัตโนมัติจากชื่อ-สกุล</span></div>
-    <div class="tbl-wrap" style="max-height:420px;overflow:auto"><table class="t"><thead><tr><th>ชื่อผู้ใช้</th><th>ชื่อใน e-Score</th><th>ครูในตารางสอน</th><th>วิธี</th></tr></thead><tbody>
-    ${UI.admin.users.sort((a,b)=>(!!a.teacher)-(!!b.teacher)).map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.name)}</td><td><select data-umap="${esc(u.username)}" style="min-width:240px">${tOpts(null,u.teacher)}</select></td><td class="small muted">${u.via==='map'?'กำหนดเอง':u.via==='name'?'ตรงชื่อ':'—'}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">ยังไม่มีข้อมูลผู้ใช้</td></tr>'}
+    ${(es.noAccount||[]).length?`<div class="card-b" style="padding-bottom:0"><div class="note warn">ครูในตารางสอนที่ยังไม่มีบัญชี e-Score (เข้าระบบเองไม่ได้ แต่ถูกจัดสอนแทน/มีคนจัดให้ได้): ${es.noAccount.map(esc).join(', ')}</div></div>`:''}
+    <div class="tbl-wrap" style="max-height:420px;overflow:auto"><table class="t"><thead><tr><th>รหัสครู</th><th>ชื่อใน e-Score</th><th>ครูในตารางสอน</th><th>วิธี</th></tr></thead><tbody>
+    ${UI.admin.users.sort((a,b)=>(!!a.teacher)-(!!b.teacher)).map(u=>`<tr><td>${esc(u.username)}</td><td>${esc(u.name)}</td><td><select data-umap="${esc(u.username)}" style="min-width:240px">${tOpts(null,u.teacher)}</select></td><td class="small ${u.via==='fuzzy'?'':'muted'}" style="${u.via==='fuzzy'?'color:var(--warn)':''}">${u.via==='map'?'กำหนดเอง':u.via==='name'?'ตรงชื่อ':u.via==='fuzzy'?'ชื่อใกล้เคียง — ตรวจ':(u.position||'ไม่อยู่ในตารางสอน')}${u.active===false?' · ระงับ':''}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">ยังไม่มีข้อมูลผู้ใช้</td></tr>'}
     </tbody></table></div></div>
   <div class="card" style="margin-top:14px"><div class="card-h"><h3>ตารางสอน</h3><span class="small muted">ที่มา: ${esc(UI.admin.timetable.source||'-')} · นำเข้าเมื่อ ${fmtDT(UI.admin.timetable.importedAt)} · ครู ${UI.admin.timetable.teachers} คน</span></div><div class="card-b">
-    <div class="row"><input type="file" id="ttfile" accept=".html,.htm,.json" style="max-width:360px"><button class="btn" data-act="ttimport">นำเข้าตารางสอนใหม่</button></div>
-    <div class="tiny muted" style="margin-top:6px">รองรับไฟล์ Dashboard ตารางเรียน-ตารางสอน (.html) หรือ timetable JSON · ข้อมูลการจัดสอนแทนเดิมยังอยู่ (อ้างอิงตามชื่อครู)</div></div></div>`;
+    <div class="row"><input type="file" id="ttfile" accept=".xlsx,.xls,.html,.htm,.json" style="max-width:360px"><button class="btn" data-act="ttimport">นำเข้าตารางสอนใหม่</button></div>
+    <div class="tiny muted" style="margin-top:6px"><b>แนะนำ: ไฟล์ Excel ฐานข้อมูลตารางเรียนตารางสอน (.xlsx)</b> ที่มีชีต “ฐานข้อมูลตารางสอน” และ “ฐานข้อมูลตารางเรียน” · รองรับ Dashboard (.html) ด้วย · ข้อมูลการจัดสอนแทนเดิมยังอยู่ (อ้างอิงตามชื่อครู)</div></div></div>`;
+}
+function loadXLSX(){
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((res, rej) => { const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>res(window.XLSX); s.onerror=()=>rej(new Error('โหลดตัวอ่านไฟล์ Excel ไม่สำเร็จ (ตรวจการเชื่อมต่ออินเทอร์เน็ต)')); document.head.appendChild(s); });
 }
 function convertDashboard(dash, prev){
   const names = dash.sorted_teachers, idx = {}; names.forEach((n,i)=>idx[n]=i);
@@ -1370,13 +1507,20 @@ document.addEventListener('click', async e => {
       toast('บันทึกการตั้งค่าแล้ว'); UI.admin=null; await bootstrap(); VIEW='settings'; render(); break; }
     case 'ttimport': {
       const f=$('#ttfile').files[0]; if (!f){ toast('เลือกไฟล์ก่อน'); break; }
-      const text = await f.text(); let data;
+      let data, warns=[];
       try {
+        if (/\.xlsx?$/i.test(f.name)) {
+          const X = await loadXLSX(); const wb = X.read(await f.arrayBuffer(), {type:'array'});
+          const r = TTImport.fromWorkbook(X, wb, D); data = r.D; data.term = SET.termName; warns = r.warnings;
+        } else { const text = await f.text();
         if (/^\s*[{[]/.test(text)) { data = JSON.parse(text); }
         else { const m = text.match(/<script id="data" type="application\/json">([\s\S]*?)<\/script>/); if (!m) throw new Error('ไม่พบข้อมูลตารางสอนในไฟล์'); data = JSON.parse(m[1]); }
-        if (!data.ts) data = convertDashboard(data, D);
+        if (!data.ts) data = convertDashboard(data, D); }
       } catch(err){ alertModal('อ่านไฟล์ไม่สำเร็จ', String(err.message||err)); break; }
-      confirmModal('นำเข้าตารางสอน', `ครู <b>${data.teachers.length}</b> คน · ห้อง <b>${Object.keys(data.cs||{}).length}</b> ห้อง · คาบ <b>${data.ts.reduce((s,x)=>s+x.length,0)}</b> ช่อง<br><span class="small muted">แทนที่ตารางสอนปัจจุบัน</span>`, 'นำเข้า', async ()=>{
+      const names = new Set(data.teachers.map(t=>t.n)), gone = D.teachers.filter((t,ti)=>D.ts[ti].length && !names.has(t.n)).map(t=>t.n), added = data.teachers.filter(t=>!D.teachers.some(x=>x.n===t.n)).map(t=>t.n);
+      confirmModal('นำเข้าตารางสอน', `ครู <b>${data.teachers.length}</b> คน · ห้อง <b>${Object.keys(data.cs||{}).length}</b> ห้อง · คาบ <b>${data.ts.reduce((s,x)=>s+x.length,0)}</b> ช่อง<br><span class="small muted">แทนที่ตารางสอนปัจจุบัน</span>
+        ${added.length?`<div class="note" style="margin-top:8px">ครูใหม่: ${added.map(esc).join(', ')}</div>`:''}${gone.length?`<div class="note warn" style="margin-top:8px">ไม่มีในไฟล์ใหม่: ${gone.map(esc).join(', ')}</div>`:''}
+        ${warns.length?`<div class="note warn" style="margin-top:8px;max-height:160px;overflow:auto">${warns.map(esc).join('<br>')}</div>`:''}`, 'นำเข้า', async ()=>{
         const r = await call('apiImportTimetable', data);
         if (!r.ok){ alertModal('นำเข้าไม่สำเร็จ', r.error); return; }
         toast('นำเข้าตารางสอนแล้ว'); UI.admin=null; await bootstrap(); VIEW='settings'; render(); });

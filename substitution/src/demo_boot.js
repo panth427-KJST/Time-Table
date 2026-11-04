@@ -4,27 +4,38 @@
    ===================================================================== */
 var DemoSeed = (function () {
   function mulberry(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-  var uname = function (ti) { return 't' + ('00' + (ti + 1)).slice(-3); };
+  var ACAD_NAME = 'นายธนพันธ์ เพ็งสวัสดิ์', acadTi = -1;
+  var uname = function (ti) { return ti === acadTi ? 'T304' : 'T' + (101 + ti); };
+  var PRE = /^(ว่าที่ร้อยตรี|สิบเอก|นางสาว|นาง|นาย|Mr\.|Ms\.)\s*/;
 
   /* สร้างไฟล์ e-Score จำลอง + ฐานข้อมูล + ข้อมูลตัวอย่าง */
   function seed(F, TT) {
     F.addBook('DB', {}); F.state.active = 'DB';
-    var users = [['username', 'password', 'name', 'email']];
-    TT.teachers.forEach(function (t, i) { users.push([uname(i), '1234', t.n, '']); });
-    users.push(['acad', '1234', 'หัวหน้ากลุ่มบริหารงานวิชาการ (บัญชีทดลอง)', '']);
-    F.addBook('ESCORE', { Users: users });
-    setup();
-    var heads = {}, headTi = {};
+    acadTi = TT.teachers.map(function (t) { return t.n; }).indexOf(ACAD_NAME);
+    var headTi = {};
     TT.groups.forEach(function (g, gi) {
       var m = TT.teachers.map(function (t, ti) { return { n: t.n, ti: ti, g: t.g }; })
-        .filter(function (t) { return t.g === gi && TT.ts[t.ti].length; })
+        .filter(function (t) { return t.g === gi && TT.ts[t.ti].length && t.ti !== acadTi; })
         .sort(function (a, b) { return a.n.localeCompare(b.n, 'th'); });
-      if (m.length) { heads[g] = m[0].n; headTi[gi] = m[0].ti; }
+      if (m.length) headTi[gi] = m[0].ti;
     });
-    saveSettings_({ ESCORE_SPREADSHEET_ID: 'ESCORE', ACAD_USERS: 'acad', ADMIN_USERS: 'acad', DEPT_HEADS: JSON.stringify(heads) });
+    var isHead = {}; Object.keys(headTi).forEach(function (g) { isHead[headTi[g]] = 1; });
+    // ชีต Users รูปแบบเดียวกับ e-Score จริง (รหัสผ่าน 1234 เข้ารหัส PBKDF2 500 รอบ)
+    var users = [['teacher_id', 'email', 'prefix', 'first_name', 'last_name', 'display_name', 'roles', 'subject_group', 'department',
+      'position', 'seniority', 'password_hash', 'salt', 'must_change_password', 'is_active', 'last_login', 'created_at']];
+    TT.teachers.forEach(function (t, i) {
+      var pre = (t.n.match(PRE) || ['', ''])[1], rest = t.n.replace(PRE, '').split(' '), first = rest[0], last = rest.slice(1).join(' ');
+      var salt = ('0000000' + (i * 2654435761 >>> 0).toString(16)).slice(-8) + 'c0ffee00c0ffee00c0ffee00';
+      users.push([uname(i), '', pre, first, last, 'ครู' + first + ' ' + last, 'teacher', TT.groups[t.g],
+        i === acadTi ? 'วิชาการ' : '', i === acadTi ? 'หัวหน้ากลุ่ม' : isHead[i] ? 'หัวหน้ากลุ่มสาระ' : '', '',
+        pbkdf2_('1234', salt, 500, 32), salt, 'FALSE', 'TRUE', '', '']);
+    });
+    F.addBook('ESCORE', { Users: users });
+    setup();
+    saveSettings_({ ESCORE_SPREADSHEET_ID: 'ESCORE' });
 
     var tok = {}, login = function (u) { if (!tok[u]) { var r = apiLogin(u, '1234'); if (!r.ok) throw new Error(r.error); tok[u] = r.token; } return tok[u]; };
-    var rnd = mulberry(2569), used = {};
+    var rnd = mulberry(2569), used = {}; used[acadTi] = 1;
     var c0 = ctx_(), E0 = c0.E, D = c0.D;
     function pickTeacher(d, min) {
       var w = SubEngine.wd(d);
@@ -53,7 +64,7 @@ var DemoSeed = (function () {
         items: req.items.map(function (i) { return { id: i.id, method: i.method, sub: i.sub, swap: i.swap }; }) };
     }
     function submit(asTi, d) {
-      var r = apiSubmit(login(asTi == null ? 'acad' : uname(asTi)), d);
+      var r = apiSubmit(login(uname(asTi)), d);
       if (!r.ok) throw new Error('seed submit: ' + r.error);
       return r.data.id;
     }
@@ -62,7 +73,7 @@ var DemoSeed = (function () {
       var E = ctx_().E;
       req(id).items.forEach(function (it) { var w = E.ackWho(it); if (it.ack === 'pending' && w !== except) apiAck(login(uname(w)), id, [it.id]); });
     }
-    var acad = function () { return login('acad'); };
+    var acad = function () { return login('T304'); };
     var n = function (k) { return E0.nthSchool(k); };
     var demo = {};
 
@@ -81,9 +92,10 @@ var DemoSeed = (function () {
     var t3 = pickTeacher(n(2)), id3 = submit(t3, draft('official', t3, [n(2)], { methods: ['swapF', 'swapT', 'sub'], reason: 'อบรมเชิงปฏิบัติการ สพม.สุราษฎร์ธานี ชุมพร', file: { name: 'หนังสือขอความอนุเคราะห์.pdf', url: '#' } }));
     ackAll(id3);
     // 4) ลากิจ — รอรับทราบ (ครูตัวอย่างอยู่ในนี้)
-    var t4 = pickTeacher(n(3)), id4 = submit(t4, draft('personal', t4, [n(3)], { reason: 'งานบวชบุตรชาย' }));
+    var t4 = pickTeacher(n(3), 5), id4 = submit(t4, draft('personal', t4, [n(3)], { reason: 'งานบวชบุตรชาย', skip: 2 }));
     E = ctx_().E;
-    var first = req(id4).items.filter(function (i) { return i.ack === 'pending'; })[0];
+    var pend4 = req(id4).items.filter(function (i) { return i.ack === 'pending'; });
+    var first = pend4.slice().sort(function (a, b) { return D.ts[E.ackWho(b)].length - D.ts[E.ackWho(a)].length; })[0];
     demo.teacher = first ? E.ackWho(first) : 0;
     req(id4).items.filter(function (i) { return i.ack === 'pending' && E.ackWho(i) !== demo.teacher; }).slice(0, 1)
       .forEach(function (i) { apiAck(login(uname(E.ackWho(i))), id4, [i.id]); });
@@ -107,7 +119,7 @@ var DemoSeed = (function () {
         { u: uname(demo.teacher), label: 'ครูผู้สอน', note: D.teachers[demo.teacher].n + ' · มีคาบรอรับทราบ' },
         { u: uname(demo.fixOwner), label: 'ครูที่ต้องจัดสอนแทนใหม่', note: D.teachers[demo.fixOwner].n + ' · มีผู้ขอเปลี่ยน' },
         { u: uname(demo.head), label: 'หัวหน้ากลุ่มสาระฯ', note: D.teachers[demo.head].n + ' · จัดกรณีลาป่วยให้ครูในกลุ่ม' },
-        { u: 'acad', label: 'หัวหน้ากลุ่มบริหารงานวิชาการ', note: 'เห็นชอบ · สถิติ · ตั้งค่า' }
+        { u: 'T304', label: 'หัวหน้ากลุ่มบริหารงานวิชาการ', note: ACAD_NAME + ' · เห็นชอบ · สถิติ · ตั้งค่า' }
       ]
     };
     F.persist();

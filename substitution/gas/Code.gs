@@ -389,6 +389,131 @@ if (typeof module !== 'undefined') module.exports = SubEngine;
 
 
 /* =====================================================================
+   TTImport — แปลงไฟล์ Excel "ฐานข้อมูลตารางเรียนตารางสอน" เป็นข้อมูลตารางสอนของระบบ
+   ใช้ทั้งหน้าเว็บ (นำเข้าในหน้าตั้งค่า) และ build.py (ผ่าน node)
+   ต้องมี 2 ชีต:
+     ฐานข้อมูลตารางสอน : ชื่อ-สกุล | กลุ่มสาระ | วัน | คาบ | เวลา | รหัสวิชา | ชื่อวิชา | ชั้นที่สอน | ห้อง | ประเภทคาบ
+     ฐานข้อมูลตารางเรียน: ชั้นเรียน | วัน | คาบ | เวลา | รหัสวิชา | ชื่อวิชา | ครูผู้สอน | ห้อง | สถานะ | กลุ่มสาระ
+   ===================================================================== */
+var TTImport = (function () {
+  'use strict';
+  var GROUP_ORDER = ['ภาษาไทย', 'คณิตศาสตร์', 'วิทยาศาสตร์และเทคโนโลยี', 'สังคมศึกษา ศาสนา และวัฒนธรรม',
+    'สุขศึกษาและพลศึกษา', 'ศิลปะ', 'การงานอาชีพ', 'ภาษาต่างประเทศ', 'กิจกรรมพัฒนาผู้เรียน'];
+  var ALIAS = { 'วิทยาศาสตร์ฯ': 2, 'วิทยาศาสตร์': 2, 'สังคมศึกษาฯ': 3, 'สังคมศึกษา': 3, 'สุขศึกษาฯ': 4, 'สุขศึกษา': 4,
+    'การงานฯ': 6, 'กิจกรรมแนะแนว': 8, 'แนะแนว': 8, 'กิจกรรมฯ': 8 };
+  var DAYS = ['วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์'];
+  var squash = function (s) { return String(s || '').replace(/\s+/g, ''); };
+
+  function groupIndex(name) {
+    var s = squash(name); if (!s) return -1;
+    for (var i = 0; i < GROUP_ORDER.length; i++) if (squash(GROUP_ORDER[i]) === s) return i;
+    if (ALIAS[String(name).trim()] != null) return ALIAS[String(name).trim()];
+    for (i = 0; i < GROUP_ORDER.length; i++) if (squash(GROUP_ORDER[i]).indexOf(s.replace('ฯ', '')) === 0) return i;
+    return -1;
+  }
+  function dayIndex(v) {
+    var s = String(v || '').trim(); if (s.indexOf('วัน') !== 0) s = 'วัน' + s;
+    return DAYS.indexOf(s);
+  }
+  function periodIndex(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (/^HR$/i.test(s) || s === '0') return 0;
+    var m = s.match(/(\d+)/); return m ? +m[1] : -1;
+  }
+  function cols(header, want) {
+    var h = header.map(function (x) { return squash(x); }), out = {};
+    Object.keys(want).forEach(function (k) {
+      var i = -1;
+      want[k].some(function (n) { i = h.indexOf(squash(n)); return i >= 0; });
+      out[k] = i;
+    });
+    return out;
+  }
+  var str = function (v) { return v == null ? '' : String(v).trim(); };
+
+  /* teach, cls: array of rows (แถวแรกเป็นหัวตาราง) · prev: ข้อมูลเดิม (คงเวร/คาบไม่ต้องจัด) */
+  function fromRows(teach, cls, prev) {
+    prev = prev || {};
+    var warn = [];
+    var ct = cols(teach[0], { name: ['ชื่อ-สกุล', 'ชื่อสกุล', 'ครู'], group: ['กลุ่มสาระ'], day: ['วัน'], period: ['คาบ'], time: ['เวลา'],
+      code: ['รหัสวิชา'], subj: ['ชื่อวิชา'], cls: ['ชั้นที่สอน', 'ชั้นเรียน', 'ห้องเรียน'], room: ['ห้อง'], kind: ['ประเภทคาบ', 'สถานะ'] });
+    ['name', 'day', 'period', 'code'].forEach(function (k) { if (ct[k] < 0) throw new Error('ชีตตารางสอนไม่มีคอลัมน์ ' + k); });
+    var cc = cols(cls[0], { cls: ['ชั้นเรียน', 'ห้องเรียน', 'ชั้น'], day: ['วัน'], period: ['คาบ'], time: ['เวลา'], code: ['รหัสวิชา'],
+      subj: ['ชื่อวิชา'], teachers: ['ครูผู้สอน', 'ครู'], room: ['ห้อง'], status: ['สถานะ'] });
+    ['cls', 'day', 'period'].forEach(function (k) { if (cc[k] < 0) throw new Error('ชีตตารางเรียนไม่มีคอลัมน์ ' + k); });
+
+    var times = (prev.times || []).slice(), teachers = [], tIdx = {}, ts = [];
+    teach.slice(1).forEach(function (r) {
+      var n = str(r[ct.name]); if (!n) return;
+      if (tIdx[n] == null) {
+        var g = groupIndex(r[ct.group]);
+        if (g < 0) { warn.push('ไม่รู้จักกลุ่มสาระ "' + str(r[ct.group]) + '" ของ ' + n + ' (จัดเป็นกิจกรรมพัฒนาผู้เรียน)'); g = 8; }
+        tIdx[n] = teachers.length; teachers.push({ n: n, g: g }); ts.push([]);
+      }
+      var d = dayIndex(r[ct.day]), p = periodIndex(r[ct.period]);
+      if (d < 0 || p < 0 || p > 9) return;
+      if (ct.time >= 0 && str(r[ct.time])) times[p] = str(r[ct.time]);
+      var code = str(r[ct.code]);
+      if (!code) return;                                    // ว่าง
+      ts[tIdx[n]].push([d, p, code, str(r[ct.subj]), str(r[ct.cls]), str(r[ct.room])]);
+    });
+    var cs = {}, classes = [], lunch = {};
+    cls.slice(1).forEach(function (r) {
+      var c = str(r[cc.cls]); if (!c) return;
+      if (!cs[c]) { cs[c] = []; classes.push(c); }
+      var d = dayIndex(r[cc.day]), p = periodIndex(r[cc.period]);
+      if (d < 0 || p < 0 || p > 9) return;
+      if (cc.time >= 0 && str(r[cc.time]) && !times[p]) times[p] = str(r[cc.time]);
+      var status = cc.status >= 0 ? str(r[cc.status]) : '', code = str(r[cc.code]);
+      if (status === 'ว่าง' || (!code && !status)) return;
+      if (status === 'พักกลางวัน' || code === 'พักกลางวัน') {
+        var lv = (c.match(/^ม\.\d/) || [''])[0]; if (lv) lunch[lv] = p;
+        code = 'พักกลางวัน';
+      }
+      var tis = str(r[cc.teachers]).split(/\s*,\s*/).filter(String).map(function (n) {
+        if (tIdx[n] == null) { warn.push('ตารางเรียน ' + c + ': ไม่พบครู "' + n + '" ในชีตตารางสอน'); return null; }
+        return tIdx[n];
+      }).filter(function (x) { return x != null; });
+      cs[c].push([d, p, code || status, str(r[cc.subj]) || status, tis, str(r[cc.room])]);
+    });
+    // ห้องที่ครูสอนแต่ไม่อยู่ในตารางสอนของครู (ตรวจความสอดคล้อง)
+    var seen = {};
+    ts.forEach(function (rows, ti) { rows.forEach(function (x) {
+      if (cs[x[4]] && x[0] != null) {
+        var ok = cs[x[4]].some(function (y) { return y[0] === x[0] && y[1] === x[1]; });
+        var k = x[4] + x[0] + '-' + x[1];
+        if (!ok && !seen[k]) { seen[k] = 1; warn.push('ไม่สอดคล้อง: ' + teachers[ti].n + ' สอน ' + x[4] + ' ' + DAYS[x[0]] + ' คาบ ' + x[1] + ' แต่ตารางเรียนห้องนั้นว่าง'); }
+      }
+    }); });
+    // เวร: คงของเดิมตามชื่อครู
+    var duty = {};
+    if (prev.duty && prev.teachers) Object.keys(prev.duty).forEach(function (ti) {
+      var t = prev.teachers[ti]; if (t && tIdx[t.n] != null) duty[tIdx[t.n]] = prev.duty[ti];
+    });
+    for (var p = 0; p <= 9; p++) if (!times[p]) times[p] = '';
+    return {
+      D: { term: prev.term || '', source: 'Excel ฐานข้อมูลตารางเรียนตารางสอน', days: DAYS.slice(), times: times, groups: GROUP_ORDER.slice(),
+        noCover: prev.noCover || ['HR', 'MEET', 'PLC', 'ประชุม'], activity: prev.activity || ['ชุมนุม', 'ลูกเสือ'],
+        lunch: Object.keys(lunch).length ? lunch : (prev.lunch || {}), teachers: teachers, classes: classes, ts: ts, cs: cs, duty: duty },
+      warnings: warn,
+      summary: { teachers: teachers.length, classes: classes.length, slots: ts.reduce(function (s, x) { return s + x.length; }, 0) }
+    };
+  }
+
+  /* หน้าเว็บ: workbook จาก SheetJS */
+  function fromWorkbook(XLSX, wb, prev) {
+    var find = function (re) { var n = wb.SheetNames.filter(function (s) { return re.test(s.replace(/\s/g, '')); })[0]; return n && wb.Sheets[n]; };
+    var t = find(/ตารางสอน/), c = find(/ตารางเรียน/);
+    if (!t || !c) throw new Error('ไม่พบชีต “ฐานข้อมูลตารางสอน” และ “ฐานข้อมูลตารางเรียน” ในไฟล์');
+    var aoa = function (s) { return XLSX.utils.sheet_to_json(s, { header: 1, raw: false, defval: null }); };
+    return fromRows(aoa(t), aoa(c), prev);
+  }
+  return { fromRows: fromRows, fromWorkbook: fromWorkbook, groupIndex: groupIndex, GROUP_ORDER: GROUP_ORDER };
+})();
+if (typeof module !== 'undefined') module.exports = TTImport;
+
+
+/* =====================================================================
    ระบบจัดสอนแทน KJST — Google Apps Script (server)
    ฐานข้อมูล: Google Sheet ที่ผูกกับสคริปต์นี้ (ชีต Settings, Teachers, Timetable, ClassTimetable,
              Duty, Requests, Items, Log, UserMap)
@@ -423,20 +548,22 @@ var DEFAULTS = [
   ['DEPT_HEADS', '{}', 'หัวหน้ากลุ่มสาระฯ JSON {"ชื่อกลุ่มสาระ":"ชื่อครู"} — แก้ได้ในหน้าตั้งค่าของระบบ'],
   ['ACAD_USERS', '', 'ชื่อผู้ใช้ e-Score ของหัวหน้ากลุ่มบริหารงานวิชาการ (คั่นด้วยจุลภาค)'],
   ['ADMIN_USERS', '', 'ชื่อผู้ใช้ e-Score ของผู้ดูแลระบบ (คั่นด้วยจุลภาค)'],
-  ['ESCORE_SPREADSHEET_ID', '', 'ID ของ Google Sheet ระบบ e-Score (ส่วนระหว่าง /d/ กับ /edit ใน URL)'],
+  ['ESCORE_SPREADSHEET_ID', '1pS2DDkSvYiWBhFaWewTcGkcnjCPVpiRRe6LFmWvGgfI', 'ID ของ Google Sheet ระบบ e-Score (ส่วนระหว่าง /d/ กับ /edit ใน URL)'],
   ['ESCORE_USERS_SHEET', 'Users', 'ชื่อชีตผู้ใช้ใน e-Score'],
   ['ESCORE_COL_USERNAME', '', 'ชื่อหัวคอลัมน์ username (เว้นว่าง = ตรวจหาอัตโนมัติ)'],
   ['ESCORE_COL_PASSWORD', '', 'ชื่อหัวคอลัมน์ password (เว้นว่าง = ตรวจหาอัตโนมัติ)'],
   ['ESCORE_COL_NAME', '', 'ชื่อหัวคอลัมน์ชื่อ-สกุล (เว้นว่าง = ตรวจหาอัตโนมัติ)'],
   ['ESCORE_COL_EMAIL', '', 'ชื่อหัวคอลัมน์อีเมล (ถ้ามี)'],
-  ['ESCORE_HASH', 'auto', 'รูปแบบรหัสผ่านใน e-Score: auto | plain | sha256 | md5'],
+  ['ESCORE_HASH', 'auto', 'รูปแบบรหัสผ่านใน e-Score: auto | pbkdf2 | plain | sha256 | md5 (auto: มีคอลัมน์ salt = pbkdf2)'],
+  ['ESCORE_PBKDF2_ITER', '500', 'จำนวนรอบ PBKDF2 ให้ตรงกับ e-Score (PBKDF2_ITERATIONS)'],
+  ['ESCORE_AUTO_ROLES', 'on', 'on = กำหนดบทบาทจากคอลัมน์ roles/position/department/subject_group ของ e-Score'],
   ['NOTIFY_EMAIL', 'off', 'ส่งอีเมลแจ้งเตือน on/off (ต้องมีคอลัมน์อีเมลใน Users)'],
   ['UPLOAD_FOLDER_ID', '', 'โฟลเดอร์ Google Drive เก็บไฟล์แนบ (เว้นว่าง = สร้างอัตโนมัติ)'],
   ['TT_META', '', 'ข้อมูลโครงสร้างตารางสอน (ระบบจัดการเอง)']
 ];
 var EDITABLE = ['SCHOOL_NAME', 'TERM_NAME', 'TERM_START', 'TERM_END', 'MAX_AHEAD', 'LEAD_DAYS', 'HOLIDAYS', 'DEPT_HEADS',
   'ACAD_USERS', 'ADMIN_USERS', 'ESCORE_SPREADSHEET_ID', 'ESCORE_USERS_SHEET', 'ESCORE_COL_USERNAME', 'ESCORE_COL_PASSWORD',
-  'ESCORE_COL_NAME', 'ESCORE_COL_EMAIL', 'ESCORE_HASH', 'NOTIFY_EMAIL', 'UPLOAD_FOLDER_ID'];
+  'ESCORE_COL_NAME', 'ESCORE_COL_EMAIL', 'ESCORE_HASH', 'ESCORE_PBKDF2_ITER', 'ESCORE_AUTO_ROLES', 'NOTIFY_EMAIL', 'UPLOAD_FOLDER_ID'];
 
 /* ---------------------------------------------------------------- web */
 function doGet() {
@@ -637,10 +764,13 @@ function nextId_(S) {
 
 /* ---------------------------------------------------------------- e-Score users & auth */
 var COLS_ = {
-  username: ['username', 'user', 'user name', 'user_name', 'userid', 'user_id', 'login', 'ชื่อผู้ใช้', 'ชื่อเข้าใช้', 'รหัสผู้ใช้', 'id', 'email', 'อีเมล'],
-  password: ['password', 'pass', 'passwd', 'pwd', 'รหัสผ่าน'],
-  name: ['name', 'fullname', 'full name', 'full_name', 'display name', 'ชื่อ-สกุล', 'ชื่อ-นามสกุล', 'ชื่อ - สกุล', 'ชื่อ สกุล', 'ชื่อสกุล', 'ชื่อครู', 'ครู', 'teacher', 'ชื่อ'],
-  email: ['email', 'e-mail', 'mail', 'อีเมล', 'อีเมล์']
+  username: ['teacher_id', 'username', 'user', 'user name', 'user_name', 'userid', 'user_id', 'login', 'ชื่อผู้ใช้', 'รหัสครู', 'id'],
+  password: ['password_hash', 'password', 'pass', 'passwd', 'pwd', 'รหัสผ่าน'],
+  name: ['display_name', 'name', 'fullname', 'full name', 'full_name', 'ชื่อ-สกุล', 'ชื่อ-นามสกุล', 'ชื่อสกุล', 'ชื่อครู', 'teacher'],
+  email: ['email', 'e-mail', 'mail', 'อีเมล', 'อีเมล์'],
+  salt: ['salt'], prefix: ['prefix', 'คำนำหน้า'], first: ['first_name', 'ชื่อ'], last: ['last_name', 'นามสกุล', 'สกุล'],
+  active: ['is_active', 'active'], roles: ['roles', 'role'], group: ['subject_group'], dept: ['department'], position: ['position', 'ตำแหน่ง'],
+  mustChange: ['must_change_password']
 };
 function detectCols_(headers, S) {
   var norm = headers.map(function (h) { return String(h).trim().toLowerCase(); });
@@ -648,14 +778,18 @@ function detectCols_(headers, S) {
     if (override) { var i = norm.indexOf(String(override).trim().toLowerCase()); if (i >= 0) return i; }
     var c = COLS_[key];
     for (var a = 0; a < c.length; a++) { var j = norm.indexOf(c[a]); if (j >= 0 && exclude.indexOf(j) < 0) return j; }
+    if (['username', 'password', 'name', 'email'].indexOf(key) < 0) return -1;
     for (var b = 0; b < c.length; b++) for (var k = 0; k < norm.length; k++) if (exclude.indexOf(k) < 0 && c[b].length > 2 && norm[k].indexOf(c[b]) >= 0) return k;
     return -1;
   };
-  var pw = pick('password', S.ESCORE_COL_PASSWORD, []);
-  var un = pick('username', S.ESCORE_COL_USERNAME, [pw]);
-  var nm = pick('name', S.ESCORE_COL_NAME, [pw, un]);
-  var em = pick('email', S.ESCORE_COL_EMAIL, [pw]);
-  return { username: un, password: pw, name: nm, email: em, headers: headers };
+  var col = { headers: headers };
+  col.password = pick('password', S.ESCORE_COL_PASSWORD, []);
+  col.email = pick('email', S.ESCORE_COL_EMAIL, [col.password]);
+  col.username = pick('username', S.ESCORE_COL_USERNAME, [col.password]);
+  if (col.username < 0) col.username = col.email;
+  col.name = pick('name', S.ESCORE_COL_NAME, [col.password, col.username]);
+  ['salt', 'prefix', 'first', 'last', 'active', 'roles', 'group', 'dept', 'position', 'mustChange'].forEach(function (k) { col[k] = pick(k, '', [col.password]); });
+  return col;
 }
 function escoreUsers_(S, force) {
   var cache = CacheService.getScriptCache();
@@ -664,20 +798,41 @@ function escoreUsers_(S, force) {
   var sh = SpreadsheetApp.openById(S.ESCORE_SPREADSHEET_ID).getSheetByName(S.ESCORE_USERS_SHEET || 'Users');
   if (!sh) throw new Error('ไม่พบชีต ' + (S.ESCORE_USERS_SHEET || 'Users') + ' ในไฟล์ e-Score');
   var v = sh.getDataRange().getValues(), col = detectCols_(v[0], S);
-  if (col.username < 0 || col.password < 0) throw new Error('หาคอลัมน์ username/password ในชีต Users ไม่พบ — กำหนด ESCORE_COL_USERNAME / ESCORE_COL_PASSWORD');
+  if (col.username < 0 || col.password < 0) throw new Error('หาคอลัมน์ชื่อผู้ใช้/รหัสผ่านในชีต Users ไม่พบ — กำหนด ESCORE_COL_USERNAME / ESCORE_COL_PASSWORD');
+  var g = function (r, k) { return col[k] >= 0 ? String(r[col[k]] == null ? '' : r[col[k]]).trim() : ''; };
   var users = v.slice(1).filter(function (r) { return String(r[col.username]).trim(); }).map(function (r) {
-    return { u: String(r[col.username]).trim(), p: String(r[col.password]), n: col.name >= 0 ? String(r[col.name]).trim() : String(r[col.username]).trim(),
-      e: col.email >= 0 ? String(r[col.email]).trim() : '' };
+    var first = g(r, 'first'), last = g(r, 'last');
+    return { u: g(r, 'username'), p: String(r[col.password]), s: g(r, 'salt'), e: g(r, 'email').toLowerCase(),
+      n: g(r, 'name') || (g(r, 'prefix') + first + (last ? ' ' + last : '')) || g(r, 'username'),
+      f: first, l: last, a: col.active < 0 || !/^(false|0|no|ไม่|ระงับ|inactive)$/i.test(g(r, 'active')),
+      r: g(r, 'roles').toLowerCase(), sg: g(r, 'group'), dp: g(r, 'dept'), pos: g(r, 'position'), mc: /^true$/i.test(g(r, 'mustChange')) };
   });
-  var out = { users: users, cols: { username: v[0][col.username], password: v[0][col.password], name: col.name >= 0 ? v[0][col.name] : '', email: col.email >= 0 ? v[0][col.email] : '' } };
+  var H = function (k) { return col[k] >= 0 ? String(v[0][col[k]]) : ''; };
+  var out = { users: users, cols: { username: H('username'), password: H('password'), name: H('name'), email: H('email'), salt: H('salt') } };
   try { cache.put('ESCORE_USERS', JSON.stringify(out), 600); } catch (e) { /* ใหญ่เกิน cache ก็อ่านใหม่ทุกครั้ง */ }
   return out;
 }
 function hex_(bytes) { return bytes.map(function (b) { var h = ((b + 256) % 256).toString(16); return h.length < 2 ? '0' + h : h; }).join(''); }
-function checkPwd_(stored, input, mode) {
+/* PBKDF2-HMAC-SHA256 — สูตรเดียวกับ e-Score (Auth: pbkdf2_): salt ใช้เป็นข้อความ UTF-8, ผลลัพธ์ hex ตัวเล็ก */
+function u8_(s) { return Utilities.newBlob(String(s)).getBytes().map(function (b) { return (b + 256) % 256; }); }
+function hmac_(key, msg) { return Utilities.computeHmacSha256Signature(msg, key).map(function (b) { return (b + 256) % 256; }); }
+function pbkdf2_(password, salt, iterations, dkLen) {
+  var pw = u8_(password), sb = u8_(salt), out = [];
+  for (var block = 1; out.length < dkLen; block++) {
+    var u = hmac_(pw, sb.concat([(block >>> 24) & 255, (block >>> 16) & 255, (block >>> 8) & 255, block & 255])), t = u.slice();
+    for (var i = 1; i < iterations; i++) { u = hmac_(pw, u); for (var j = 0; j < t.length; j++) t[j] ^= u[j]; }
+    out = out.concat(t);
+  }
+  return hex_(out.slice(0, dkLen));
+}
+function checkPwd_(stored, input, mode, salt, iter) {
   stored = String(stored == null ? '' : stored).trim(); input = String(input == null ? '' : input);
   if (!stored || !input) return false;
   mode = String(mode || 'auto').toLowerCase();
+  if (mode === 'pbkdf2' || (mode === 'auto' && salt)) {
+    var h = pbkdf2_(input, String(salt || ''), +iter || 500, stored.length === 128 ? 64 : 32);
+    return h.length === stored.length && h === stored.toLowerCase();
+  }
   if ((mode === 'auto' || mode === 'plain') && stored === input) return true;
   var algs = [];
   if (mode === 'auto' || mode === 'sha256') algs.push(Utilities.DigestAlgorithm.SHA_256);
@@ -692,33 +847,71 @@ function checkPwd_(stored, input, mode) {
   return false;
 }
 function normName_(s) {
-  return String(s || '').replace(/^\s*(ว่าที่\s*ร้อยตรี|ว่าที่\s*ร\.ต\.|ว่าที่ร\.ต\.|สิบเอก|ส\.อ\.|ดร\.|นางสาว|น\.ส\.|นาง|นาย|mr\.?|ms\.?|mrs\.?|miss)\s*/i, '')
-    .replace(/[\s.]/g, '').toLowerCase();
+  return String(s || '').replace(/^\s*(ครู|ว่าที่\s*ร้อยตรี|ว่าที่\s*ร\.ต\.|ว่าที่ร\.ต\.|สิบเอก|ส\.อ\.|ดร\.|นางสาว|น\.ส\.|นาง|นาย|mr\.?|ms\.?|mrs\.?|miss)\s*/i, '')
+    .replace(/[\s.]/g, '').replace(/([่-๋])\1+/g, '$1').toLowerCase();
 }
-function matchTeacher_(D, username, displayName, umap) {
-  if (umap[username.toLowerCase()]) return umap[username.toLowerCase()];
-  var k = normName_(displayName); if (!k) return null;
-  for (var i = 0; i < D.teachers.length; i++) if (normName_(D.teachers[i].n) === k) return D.teachers[i].n;
-  return null;
+function editDist_(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return 9;
+  var d = [], i, j;
+  for (i = 0; i <= a.length; i++) { d[i] = [i]; for (j = 1; j <= b.length; j++) d[i][j] = i ? 0 : j; }
+  for (i = 1; i <= a.length; i++) for (j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
 }
+/* คืน {name, via} — via: map (กำหนดเอง) | name (ชื่อตรง) | fuzzy (ชื่อต่างกัน 1 ตัวอักษร นามสกุลตรง) */
+function matchTeacherInfo_(D, u, umap) {
+  var m = umap[String(u.u).toLowerCase()];
+  if (m) return { name: m, via: 'map' };
+  var keys = D.teachers.map(function (t) { return normName_(t.n); });
+  var cands = [u.f && u.l ? u.f + u.l : '', u.n].map(normName_).filter(String);
+  for (var c = 0; c < cands.length; c++) { var i = keys.indexOf(cands[c]); if (i >= 0) return { name: D.teachers[i].n, via: 'name' }; }
+  if (u.f && u.l) {
+    var last = normName_(u.l), first = normName_(u.f), hit = [];
+    keys.forEach(function (k, i) {
+      if (k.length > last.length && k.slice(-last.length) === last && editDist_(k.slice(0, k.length - last.length), first) <= 1) hit.push(i);
+    });
+    if (hit.length === 1) return { name: D.teachers[hit[0]].n, via: 'fuzzy' };
+  }
+  return { name: null, via: '' };
+}
+function matchTeacher_(D, u, umap) { return matchTeacherInfo_(D, u, umap).name; }
 function userMap_() {
   var m = {}; readRows_('umap').forEach(function (r) { if (r.escore_username) m[String(r.escore_username).toLowerCase()] = r.teacher; });
   return m;
+}
+/* หัวหน้ากลุ่มสาระฯ: ตั้งในระบบ (DEPT_HEADS) มาก่อน ถ้าไม่ได้ตั้ง ใช้ position "หัวหน้ากลุ่มสาระ" + subject_group จาก e-Score */
+function deptHeadNames_(S, D, users) {
+  var heads = json_(S.DEPT_HEADS, {}), out = {};
+  D.groups.forEach(function (g) { if (heads[g]) out[g] = { name: heads[g], via: 'settings' }; });
+  if (S.ESCORE_AUTO_ROLES === 'off' || !users) return out;
+  var um = userMap_();
+  users.forEach(function (u) {
+    if (!u.a || !/หัวหน้ากลุ่มสาระ/.test(u.pos)) return;
+    var gi = TTImport.groupIndex(u.sg); if (gi < 0 || !D.groups[gi]) return;
+    var g = D.groups[gi]; if (out[g]) return;
+    out[g] = { name: matchTeacher_(D, u, um) || u.n, username: u.u, via: 'escore' };
+  });
+  return out;
 }
 function me_(username, S, D, users) {
   users = users || escoreUsers_(S).users;
   var u = null; for (var i = 0; i < users.length; i++) if (users[i].u.toLowerCase() === String(username).toLowerCase()) { u = users[i]; break; }
   if (!u) throw authErr_('ไม่พบบัญชีผู้ใช้');
-  var teacher = matchTeacher_(D, u.u, u.n, userMap_());
+  if (!u.a) throw authErr_('บัญชีนี้ถูกระงับในระบบ e-Score');
+  var teacher = matchTeacher_(D, u, userMap_());
   var ti = teacher != null ? SubEngine.index(D).byName[teacher] : null;
-  var roles = ['teacher'], lc = u.u.toLowerCase();
+  var roles = ['teacher'], lc = u.u.toLowerCase(), auto = S.ESCORE_AUTO_ROLES !== 'off';
   var inList = function (key) { return list_(S[key]).map(function (x) { return x.toLowerCase(); }).indexOf(lc) >= 0; };
-  if (inList('ACAD_USERS')) roles.push('acad');
-  if (inList('ADMIN_USERS')) roles.push('admin');
-  var heads = json_(S.DEPT_HEADS, {}), hg = [];
-  Object.keys(heads).forEach(function (g) { if (ti != null && heads[g] === D.teachers[ti].n) { var gi = D.groups.indexOf(g); if (gi >= 0) hg.push(gi); } });
+  if (inList('ACAD_USERS') || (auto && String(u.pos).trim() === 'หัวหน้ากลุ่ม' && /วิชาการ/.test(u.dp))) roles.push('acad');
+  if (inList('ADMIN_USERS') || (auto && /(^|,)\s*admin\s*(,|$)/.test(u.r))) roles.push('admin');
+  var heads = deptHeadNames_(S, D, users), hg = [];
+  Object.keys(heads).forEach(function (g) {
+    var h = heads[g], gi = D.groups.indexOf(g);
+    if (gi >= 0 && ((h.username && h.username.toLowerCase() === lc) || (ti != null && h.name === D.teachers[ti].n))) hg.push(gi);
+  });
   if (hg.length) roles.push('dept');
-  return { username: u.u, name: ti != null ? D.teachers[ti].n : u.n, escoreName: u.n, email: u.e, ti: ti == null ? null : ti, roles: roles, headGroups: hg };
+  return { username: u.u, name: ti != null ? D.teachers[ti].n : u.n, escoreName: u.n, email: u.e, ti: ti == null ? null : ti,
+    roles: roles, headGroups: hg, mustChange: !!u.mc };
 }
 function authErr_(m) { var e = new Error(m); e.auth = true; return e; }
 function session_(token) {
@@ -751,8 +944,9 @@ function find_(c, rid) {
 }
 function hist_(r, me, act, note) { (r.history = r.history || []).push({ at: now_(), by: me.name, act: act, note: note || '' }); r.updatedAt = now_(); }
 function pubSettings_(S, D) {
-  var heads = json_(S.DEPT_HEADS, {}), dh = {};
-  Object.keys(heads).forEach(function (g) { var gi = D.groups.indexOf(g), ti = SubEngine.index(D).byName[heads[g]]; if (gi >= 0 && ti != null) dh[gi] = ti; });
+  var users = null; try { users = escoreUsers_(S).users; } catch (e) { /* ยังไม่เชื่อมต่อ */ }
+  var heads = deptHeadNames_(S, D, users), dh = {};
+  Object.keys(heads).forEach(function (g) { var gi = D.groups.indexOf(g), ti = SubEngine.index(D).byName[heads[g].name]; if (gi >= 0 && ti != null) dh[gi] = ti; });
   var es = engineSettings_(S);
   es.deptHeads = dh; es.school = S.SCHOOL_NAME; es.termName = S.TERM_NAME; es.notify = S.NOTIFY_EMAIL === 'on';
   return es;
@@ -788,7 +982,7 @@ function queueMail_(c, tis, subject, body) { (tis || []).forEach(function (ti) {
 function sendMail_(c) {
   if (c.S.NOTIFY_EMAIL !== 'on' || !c.mail.length) return;
   var users = escoreUsers_(c.S).users, um = userMap_(), byTeacher = {};
-  users.forEach(function (u) { var t = matchTeacher_(c.D, u.u, u.n, um); if (t && u.e) byTeacher[t] = u.e; });
+  users.forEach(function (u) { var t = matchTeacher_(c.D, u, um); if (t && u.e) byTeacher[t] = u.e; });
   var url = ScriptApp.getService().getUrl();
   c.mail.forEach(function (m) {
     var to = byTeacher[c.D.teachers[m.ti] && c.D.teachers[m.ti].n];
@@ -796,9 +990,9 @@ function sendMail_(c) {
   });
 }
 function acadTis_(c) {
-  var users = escoreUsers_(c.S).users, um = userMap_(), acad = list_(c.S.ACAD_USERS).map(function (x) { return x.toLowerCase(); });
-  return users.filter(function (u) { return acad.indexOf(u.u.toLowerCase()) >= 0; })
-    .map(function (u) { var t = matchTeacher_(c.D, u.u, u.n, um); return t ? SubEngine.index(c.D).byName[t] : null; });
+  var users = escoreUsers_(c.S).users, out = [];
+  users.forEach(function (u) { try { var m = me_(u.u, c.S, c.D, users); if (m.roles.indexOf('acad') >= 0 && m.ti != null) out.push(m.ti); } catch (e) { /* ข้าม */ } });
+  return out;
 }
 function itemText_(it) { return it.date + ' คาบ ' + it.p + ' ' + it.cls; }
 
@@ -809,12 +1003,16 @@ function apiLogin(username, password) {
     if (!username || !password) throw new Error('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
     var cache = CacheService.getScriptCache(), fk = 'F_' + username.toLowerCase(), fails = +(cache.get(fk) || 0);
     if (fails >= 5) throw new Error('ใส่รหัสผ่านผิดหลายครั้ง กรุณารอ 10 นาที');
-    var S = settings_(), es = escoreUsers_(S), u = null;
-    for (var i = 0; i < es.users.length; i++) if (es.users[i].u.toLowerCase() === username.toLowerCase()) { u = es.users[i]; break; }
-    if (!u || !checkPwd_(u.p, password, S.ESCORE_HASH)) {
+    var S = settings_(), es = escoreUsers_(S), lc = username.toLowerCase();
+    var cands = es.users.filter(function (x) { return x.u.toLowerCase() === lc; });
+    if (!cands.length) cands = es.users.filter(function (x) { return x.e && x.e === lc; });
+    var u = null;
+    for (var i = 0; i < cands.length && !u; i++) if (checkPwd_(cands[i].p, password, S.ESCORE_HASH, cands[i].s, S.ESCORE_PBKDF2_ITER)) u = cands[i];
+    if (!u) {
       cache.put(fk, String(fails + 1), 600);
       throw new Error('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
     }
+    if (!u.a) throw new Error('บัญชีนี้ถูกระงับในระบบ e-Score');
     cache.remove(fk);
     var token = Utilities.getUuid();
     cache.put('S_' + token, u.u, 21600);
@@ -1015,9 +1213,12 @@ function apiAdmin(token) {
       var es = escoreUsers_(c.S, true), um = userMap_();
       info = { ok: true, cols: es.cols, count: es.users.length };
       users = es.users.map(function (u) {
-        var mapped = um[u.u.toLowerCase()], t = matchTeacher_(c.D, u.u, u.n, um);
-        return { username: u.u, name: u.n, teacher: t || '', via: mapped ? 'map' : (t ? 'name' : '') };
+        var m = matchTeacherInfo_(c.D, u, um);
+        return { username: u.u, name: u.n, email: u.e, active: u.a, position: u.pos, teacher: m.name || '', via: m.via };
       });
+      info.heads = deptHeadNames_(c.S, c.D, es.users);
+      var inTT = {}; users.forEach(function (x) { if (x.teacher) inTT[x.teacher] = 1; });
+      info.noAccount = c.D.teachers.filter(function (t, ti) { return c.D.ts[ti].length && !inTT[t.n]; }).map(function (t) { return t.n; });
     } catch (e) { info = { ok: false, error: String(e.message || e) }; }
     return { ok: true, settings: raw, escore: info, users: users, timetable: { source: c.D.source, importedAt: c.D.importedAt, teachers: c.D.teachers.length } };
   });
@@ -1067,7 +1268,8 @@ function apiUpload(token, file) {
     var S = settings_(), folder;
     if (S.UPLOAD_FOLDER_ID) folder = DriveApp.getFolderById(S.UPLOAD_FOLDER_ID);
     else {
-      folder = DriveApp.createFolder('ระบบจัดสอนแทน KJST - ไฟล์แนบ');
+      var parents = DriveApp.getFileById(db_().getId()).getParents();   // สร้างไว้ในโฟลเดอร์เดียวกับไฟล์ฐานข้อมูล
+      folder = parents.hasNext() ? parents.next().createFolder('ไฟล์แนบ') : DriveApp.createFolder('ระบบจัดสอนแทน KJST - ไฟล์แนบ');
       saveSettings_({ UPLOAD_FOLDER_ID: folder.getId() });
     }
     var blob = Utilities.newBlob(Utilities.base64Decode(file.b64), file.mime || 'application/octet-stream', file.name || 'file');
@@ -1082,6 +1284,7 @@ function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   if (!ss) throw new Error('ต้องสร้างสคริปต์จากเมนู ส่วนขยาย > Apps Script ของ Google Sheet');
   PropertiesService.getScriptProperties().setProperty('DB_ID', ss.getId());
+  ss.setSpreadsheetTimeZone(TZ);
   Object.keys(SH).forEach(function (k) { sheet_(k); });
   saveSettings_({});
   var S = settings_();
@@ -1095,11 +1298,24 @@ function setup() {
 }
 /** ตรวจการเชื่อมต่อชีต Users ของ e-Score และการจับคู่ชื่อครู */
 function testEscore() {
-  var S = settings_(), es = escoreUsers_(S, true), D = loadTimetable_(S), um = userMap_(), ok = 0, miss = [];
-  es.users.forEach(function (u) { if (matchTeacher_(D, u.u, u.n, um)) ok++; else miss.push(u.u + ' (' + u.n + ')'); });
+  var S = settings_(), es = escoreUsers_(S, true), D = loadTimetable_(S), um = userMap_(), ok = 0, miss = [], fuzzy = [];
+  es.users.forEach(function (u) {
+    var m = matchTeacherInfo_(D, u, um);
+    if (m.name) { ok++; if (m.via === 'fuzzy') fuzzy.push(u.u + ' ' + u.n + ' → ' + m.name); } else miss.push(u.u + ' (' + u.n + ')');
+  });
   Logger.log('คอลัมน์ที่ใช้: ' + JSON.stringify(es.cols));
   Logger.log('ผู้ใช้ทั้งหมด ' + es.users.length + ' · จับคู่กับรายชื่อครูได้ ' + ok);
-  if (miss.length) Logger.log('จับคู่ไม่ได้ (กำหนดเองได้ในหน้าตั้งค่า): ' + miss.join(', '));
-  var pw = es.users.length ? es.users[0].p : '';
-  Logger.log('ตัวอย่างรูปแบบรหัสผ่าน: ' + (/^[0-9a-f]{64}$/i.test(pw) ? 'SHA-256 hex' : /^[0-9a-f]{32}$/i.test(pw) ? 'MD5 hex' : /^[A-Za-z0-9+/]{43}=$/.test(pw) ? 'SHA-256 base64' : 'ข้อความธรรมดา/อื่น ๆ'));
+  if (fuzzy.length) Logger.log('จับคู่จากชื่อใกล้เคียง (โปรดตรวจ): ' + fuzzy.join(' | '));
+  if (miss.length) Logger.log('ไม่อยู่ในตารางสอน (ผู้บริหาร/ครูไม่มีคาบ ฯลฯ): ' + miss.join(', '));
+  var heads = deptHeadNames_(S, D, es.users);
+  Logger.log('หัวหน้ากลุ่มสาระฯ: ' + Object.keys(heads).map(function (g) { return g + ' = ' + heads[g].name; }).join(' | '));
+  var acad = es.users.filter(function (u) { try { return me_(u.u, S, D, es.users).roles.indexOf('acad') >= 0; } catch (e) { return false; } });
+  Logger.log('หัวหน้ากลุ่มบริหารงานวิชาการ: ' + acad.map(function (u) { return u.u + ' ' + u.n; }).join(', '));
+  var u0 = es.users.filter(function (u) { return u.s; })[0];
+  Logger.log('รูปแบบรหัสผ่าน: ' + (u0 ? 'PBKDF2-HMAC-SHA256 (มี salt) ' + (S.ESCORE_PBKDF2_ITER || 500) + ' รอบ' : 'ไม่มี salt'));
+}
+/** ตรวจว่า PBKDF2 ในสคริปต์นี้ถูกต้อง (ต้องขึ้น PASS) */
+function testPbkdf2() {
+  var got = pbkdf2_('password', 'salt', 4096, 32);
+  Logger.log(got === 'c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a' ? 'PASS' : 'FAIL ' + got);
 }

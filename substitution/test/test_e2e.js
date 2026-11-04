@@ -10,6 +10,8 @@ const ok = (c, n, x) => { if (c) { pass++; console.log('  ✓ ' + n); } else { f
 (async () => {
   const b = await chromium.launch();
   const pg = await b.newPage({ viewport: { width: 1300, height: 900 } });
+  const XLSX_JS = process.env.XLSX_JS;      // SheetJS 0.18.5 สำเนาในเครื่อง (แทน cdnjs ที่เข้าไม่ได้ในเครื่องทดสอบ)
+  if (XLSX_JS) await pg.route('**/xlsx.full.min.js', r => r.fulfill({ path: XLSX_JS, contentType: 'application/javascript' }));
   const errs = [];
   pg.on('pageerror', e => errs.push(e.message));
   pg.on('console', m => { if (m.type() === 'error' && !/fonts\.g/.test(m.text())) errs.push(m.text()); });
@@ -25,7 +27,7 @@ const ok = (c, n, x) => { if (c) { pass++; console.log('  ✓ ' + n); } else { f
   const bg = await pg.evaluate(() => getComputedStyle(document.body).backgroundColor);
   ok(bg === 'rgb(250, 249, 245)', 'ธีมพื้นหลังสีครีมอ่อน', bg);
   await shot('01-login');
-  await pg.fill('#lu', 't001'); await pg.fill('#lp', 'ผิด'); await pg.click('#lf button[type=submit]'); await idle();
+  await pg.fill('#lu', 'T101'); await pg.fill('#lp', 'ผิด'); await pg.click('#lf button[type=submit]'); await idle();
   ok(/ไม่ถูกต้อง/.test(await pg.textContent('#lerr')), 'รหัสผิดแสดงข้อความ');
 
   console.log('2) ครูผู้สอน: รับทราบ');
@@ -44,14 +46,17 @@ const ok = (c, n, x) => { if (c) { pass++; console.log('  ✓ ' + n); } else { f
   console.log('3) สร้างคำขอ: ลาบางคาบ + 3 วิธีจัด');
   await pg.click('[data-go="new"]');
   await pg.click('[data-act="wtype"][data-k="official"]');
-  const d = await pg.evaluate(() => E.nthSchool(7));
+  const d = await pg.evaluate(() => { for (let k = 5; k < 15; k++) { const d = E.nthSchool(k), w = SubEngine.wd(d);
+      const n = E.TAT[ME.ti][w].filter((e, p) => p > 0 && e && !E.NT[e.code] && !E.ACT[e.code]).length;
+      if (n >= 3 && !REQ.some(r => r.teacher === ME.ti && r.dates.includes(d))) return d; } return null; });
+  ok(!!d, 'หาวันที่ครูมีสอน ≥ 3 คาบ', d);
   await pg.fill('[data-w=start]', d); await pg.dispatchEvent('[data-w=start]', 'change'); await idle();
   const fullItems = await pg.evaluate(() => E.coverItems(W.req).length);
   await pg.click(`[data-act="ppart"][data-d="${d}"]`);
   const teach = await pg.evaluate(d => { const w = SubEngine.wd(d), t = W.req.teacher; const ps = []; for (let p = 1; p <= 9; p++) { const e = E.TAT[t][w][p]; if (e && !E.NT[e.code] && !E.ACT[e.code]) ps.push(p); } return ps; }, d);
   for (const p of teach.slice(0, 3)) await pg.click(`[data-act="pslot"][data-d="${d}"][data-p="${p}"]`);
   const partItems = await pg.evaluate(() => E.coverItems(W.req).length);
-  ok(partItems === Math.min(3, teach.length) && partItems <= fullItems, `ลาบางคาบ: ${fullItems} → ${partItems} คาบ`);
+  ok(partItems > 0 && partItems === Math.min(3, teach.length) && partItems <= fullItems, `ลาบางคาบ: ${fullItems} → ${partItems} คาบ`);
   await shot('04-new-partial');
   let iid = await pg.evaluate(() => UI.open);
   await pg.click(`[data-act="itab"][data-iid="${iid}"][data-m="swapF"]`);
@@ -128,10 +133,23 @@ const ok = (c, n, x) => { if (c) { pass++; console.log('  ✓ ' + n); } else { f
   await shot('15-log');
   await pg.click('[data-go="settings"]'); await idle(); await pg.waitForTimeout(300);
   ok(/เชื่อมต่อแล้ว/.test(await text()), 'หน้าตั้งค่า: เชื่อมต่อ e-Score แล้ว');
+  ok(/ตาม e-Score:/.test(await text()), 'หัวหน้ากลุ่มสาระอ่านจาก e-Score');
+  ok(await pg.evaluate(() => ME.username === 'T304' && ME.ti != null && ME.roles.includes('acad')), 'T304 = ครูในตาราง + หัวหน้าวิชาการ (บทบาทอัตโนมัติ)');
   await shot('16-settings');
   await pg.fill('[data-cfg="MAX_AHEAD"]', '28'); await pg.click('[data-act="savecfg"]'); await idle(); await pg.waitForTimeout(300);
   ok(await pg.evaluate(() => SET.maxAhead) === 28, 'บันทึกการตั้งค่า');
   await pg.fill('[data-cfg="MAX_AHEAD"]', '30'); await pg.click('[data-act="savecfg"]'); await idle();
+
+  if (XLSX_JS) {
+    console.log('7c) นำเข้าไฟล์ Excel ผ่านหน้าตั้งค่า');
+    await pg.click('[data-go="settings"]'); await idle(); await pg.waitForTimeout(300);
+    await pg.setInputFiles('#ttfile', path.resolve(__dirname, '..', 'data', 'timetable-db-2-2569.xlsx'));
+    await pg.click('[data-act="ttimport"]'); await pg.waitForSelector('#cmok', { timeout: 15000 });
+    const msg = await pg.textContent('#ov');
+    ok(/ครู 77 คน/.test(msg) && /2060/.test(msg) && !/ไม่มีในไฟล์ใหม่/.test(msg), 'อ่าน Excel: ครู 77 คน 2060 คาบ ไม่มีครูหาย', msg.slice(0, 120));
+    await shot('16b-import'); await pg.click('#cmok'); await idle(); await pg.waitForTimeout(400);
+    ok(/timetable|Excel/.test(await text()) && await pg.evaluate(() => D.teachers.length === 77), 'นำเข้าแล้ว ระบบยังใช้งานได้');
+  }
 
   console.log('8) มือถือ');
   await pg.setViewportSize({ width: 390, height: 844 });
