@@ -8,6 +8,47 @@
 | โฟลเดอร์ระบบ | [Drive](https://drive.google.com/drive/folders/1sYjbV9GS9_3Q_KoilVI7NI5m1G2cYGKB) — ไฟล์แนบจะเก็บในโฟลเดอร์ย่อย `ไฟล์แนบ` |
 | e-Score (ล็อกอิน) | ชีต `Users` ของ [KJST e-Score System](https://docs.google.com/spreadsheets/d/1pS2DDkSvYiWBhFaWewTcGkcnjCPVpiRRe6LFmWvGgfI/edit) — อ่านอย่างเดียว ไม่แก้ไข |
 
+## วิธี ก (แนะนำ): ใช้ clasp จากเครื่องของอาจารย์
+
+ต้องมี **Node.js 20 ขึ้นไป** และ **git** · ทำในโฟลเดอร์ `substitution/` ของ repo
+
+**ครั้งแรก**
+```bash
+git clone https://github.com/panth427-KJST/Time-Table.git
+cd Time-Table/substitution
+npm install                 # ติดตั้ง clasp 3.4.1 ไว้ในโปรเจ็กต์ (ไม่ต้องติดตั้งแบบ global)
+npm run login               # เปิดเบราว์เซอร์ → เข้าด้วย panth427@kjst.ac.th → อนุญาต
+```
+1. เปิด **Google Apps Script API** ที่ https://script.google.com/home/usersettings (ครั้งเดียวต่อบัญชี)
+2. ผูกโปรเจ็กต์ — เลือก 1 ทาง
+   - ยังไม่เคยสร้างโปรเจ็กต์ในไฟล์ KJST Substitute Teaching → `npm run create` (สร้างโปรเจ็กต์ผูกกับไฟล์ให้เลย)
+   - เคยเปิด ส่วนขยาย → Apps Script ไว้แล้ว → คัดลอก **รหัสสคริปต์** จาก ⚙️ การตั้งค่าโปรเจ็กต์ แล้ว `npm run link -- <รหัสสคริปต์>`
+3. `npm run push` — อัปโหลด Code.gs, Index.html, TimetableData.html, appsscript.json
+4. `npm run open` — เปิด editor แล้วรัน `setup` → `testPbkdf2` → `testEscore` (ครั้งเดียว ดูผลตามตารางในข้อ 2 ด้านล่าง)
+5. `npm run deploy` — เผยแพร่เว็บแอป ได้ URL `…/exec` (บันทึก ID ไว้ใน `.deployment.json`)
+6. `git add .clasp.json .deployment.json && git commit -m "Link Apps Script project"` เพื่อให้เครื่องอื่น push ได้และ URL ไม่เปลี่ยน
+
+**ครั้งต่อไป (แก้โค้ด/ได้โค้ดใหม่จาก repo)**
+```bash
+git pull
+npm run deploy              # push + อัปเดตเว็บแอปเดิม (URL เดิม)
+```
+
+| คำสั่ง | ทำอะไร |
+|---|---|
+| `npm run push` | อัปโหลดอย่างเดียว (ทดสอบผ่าน “ทดสอบการทำให้ใช้งานได้” ใน editor ก่อนได้) |
+| `npm run deploy` | อัปโหลด + อัปเดตเว็บแอปที่ครูใช้ |
+| `npm run status` | ดูว่าผูกโปรเจ็กต์ไหน และ URL เว็บแอป |
+| `npm run open` | เปิด Apps Script editor |
+| `npm run build` | สร้างไฟล์ใน `gas/` ใหม่จาก `src/` + Excel (ต้องมี Python 3 + `pip install openpyxl pillow`) — ไม่จำเป็นถ้าแค่ deploy โค้ดใน repo |
+| `npm test` | ทดสอบ server 77 กรณี |
+
+> ⚠️ ถ้า `npm run login` ขึ้นว่าแอปถูกบล็อก: โดเมน kjst.ac.th จำกัดแอปภายนอก — ให้ผู้ดูแล Google Workspace อนุญาต client ID ของ clasp `1072944905499-vm2v2i5dvn0a0d2o4ca36i1vge8cvbn0.apps.googleusercontent.com` (หรือใช้วิธี ข ด้านล่างแทน)
+>
+> การเข้าถึงเว็บแอปกำหนดใน `gas/appsscript.json` (`"access": "ANYONE_ANONYMOUS"` = ทุกคน ใช้ล็อกอินของระบบเอง) ถ้าต้องการจำกัดเฉพาะบัญชีโรงเรียน เปลี่ยนเป็น `"DOMAIN"` แล้ว `npm run deploy`
+
+## วิธี ข: วางโค้ดเองใน editor
+
 ## 1. วางโค้ด
 1. เปิดไฟล์ **KJST Substitute Teaching** → เมนู **ส่วนขยาย → Apps Script**
 2. ⚙️ การตั้งค่าโปรเจ็กต์ → ติ๊ก “แสดงไฟล์ Manifest `appsscript.json`”

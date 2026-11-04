@@ -16,6 +16,14 @@
 ## ทดลองใช้
 เปิด `Substitution-Demo-2-2569.html` → เลือกบัญชีทดลอง (รหัสครู เช่น T304 · รหัสผ่าน `1234`): ครูผู้สอน / ครูที่ต้องจัดใหม่ / หัวหน้ากลุ่มสาระฯ / หัวหน้ากลุ่มบริหารงานวิชาการ
 
+## ติดตั้ง/อัปเดตด้วย clasp
+```bash
+cd substitution && npm install && npm run login
+npm run create        # ครั้งแรก (หรือ npm run link -- <Script ID>)
+npm run deploy        # push + อัปเดตเว็บแอป (URL เดิม)
+```
+รายละเอียดใน [`INSTALL.md`](INSTALL.md)
+
 ## พัฒนาต่อ
 ```bash
 python3 substitution/build.py            # สร้างไฟล์ใหม่หลังแก้ src/ หรือตารางสอน

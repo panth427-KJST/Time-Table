@@ -1,0 +1,20 @@
+{
+  "name": "kjst-substitution",
+  "private": true,
+  "description": "ระบบจัดสอนแทน KJST — Google Apps Script (clasp)",
+  "scripts": {
+    "login": "clasp login",
+    "create": "node tools/clasp.js create",
+    "link": "node tools/clasp.js link",
+    "open": "clasp open-script",
+    "push": "node tools/clasp.js push",
+    "deploy": "node tools/clasp.js deploy",
+    "status": "node tools/clasp.js status",
+    "build": "node tools/clasp.js build",
+    "test": "node test/test_server.js",
+    "test:e2e": "node test/test_e2e.js"
+  },
+  "devDependencies": {
+    "@google/clasp": "3.4.1"
+  }
+}
