@@ -336,8 +336,16 @@ var SubEngine = (function () {
       var o = O.occ[K(ti, d, p)];
       if (o) return { kind: 'sub', why: 'ถูกจัด' + o.t + ' ' + o.cls + ' ให้ ' + shortName(o.r.teacher) + ' แล้ว' };
       var w = wd(d), e = w >= 0 && TAT[ti] && TAT[ti][w][p];
-      if (e && !O.freed[K(ti, d, p)]) return { kind: 'base', why: 'มีสอน ' + e.code + ' ' + e.cls };
+      if (e && !O.freed[K(ti, d, p)]) {
+        if (NT[e.code]) return { kind: 'meet', why: 'ติด ' + e.subj, meet: e.subj };   // ประชุม/PLC: จัดสอนแทนได้ แต่ต้องเตือน
+        return { kind: 'base', why: 'มีสอน ' + e.code + ' ' + e.cls };
+      }
       return null;
+    }
+    /* คาบประชุม/PLC ของครู ณ ช่องนั้น (ถ้ามี) — ใช้แสดงคำเตือน */
+    function meetingAt(ti, d, p) {
+      var w = wd(d), e = w >= 0 && TAT[ti] && TAT[ti][w][p];
+      return e && NT[e.code] ? e.subj : null;
     }
     function shortName(ti) {
       var t = D.teachers[ti]; if (!t) return '?';
@@ -373,11 +381,13 @@ var SubEngine = (function () {
         if (ti === req.teacher) return;
         if (dec.indexOf(ti) >= 0) { blocked.push({ ti: ti, same: t.g === g, why: 'ขอเปลี่ยนคาบนี้ไปแล้ว' }); return; }
         var b = busy(ti, item.date, item.p, O);
-        if (!b) avail.push({ ti: ti, same: t.g === g, load: dayLoad(ti, item.date, O), cum: C[ti] || 0, duty: DUTY[ti] && DUTY[ti][w] && DUTY[ti][w][item.p] });
+        if (!b || b.kind === 'meet') avail.push({ ti: ti, same: t.g === g, load: dayLoad(ti, item.date, O), cum: C[ti] || 0,
+          duty: DUTY[ti] && DUTY[ti][w] && DUTY[ti][w][item.p], meet: b ? b.meet : null });
         else if (b.kind !== 'base') blocked.push({ ti: ti, same: t.g === g, why: b.why });
       });
+      // กลุ่มสาระเดียวกันก่อน → ครูที่ว่างจริงก่อนครูที่ติดประชุม → คาบสอนวันนั้นน้อย→มาก → สอนแทนสะสม
       avail.sort(function (a, b) {
-        return (b.same - a.same) || (a.load.total - b.load.total) || (a.cum - b.cum) ||
+        return (b.same - a.same) || ((a.meet ? 1 : 0) - (b.meet ? 1 : 0)) || (a.load.total - b.load.total) || (a.cum - b.cum) ||
           D.teachers[a.ti].n.localeCompare(D.teachers[b.ti].n, 'th');
       });
       blocked.sort(function (a, b) { return b.same - a.same; });
@@ -582,7 +592,7 @@ var SubEngine = (function () {
       D: D, TAT: TAT, CAT: CAT, DUTY: DUTY, NT: NT, ACT: ACT, today: today, settings: st,
       gOf: gOf, levelOf: levelOf, shortName: shortName,
       isSchool: isSchool, schoolDays: schoolDays, maxDate: maxDate, minStart: minStart, nthSchool: nthSchool,
-      occupancy: occupancy, busy: busy, leaveAt: leaveAt, leaveCovers: leaveCovers, dayLoad: dayLoad, cumSubs: cumSubs,
+      occupancy: occupancy, busy: busy, meetingAt: meetingAt, leaveAt: leaveAt, leaveCovers: leaveCovers, dayLoad: dayLoad, cumSubs: cumSubs,
       candSub: candSub, candSwapT: candSwapT, candSwapF: candSwapF, coTeachers: coTeachers, allowNone: allowNone,
       buildItems: buildItems, ackNeeded: ackNeeded, ackWho: ackWho, coverItems: coverItems, rst: rst,
       checkItem: checkItem, validateDraft: validateDraft, ownDutyConflicts: ownDutyConflicts
@@ -1031,6 +1041,9 @@ function pickedText(it){
   if (it.method==='none') return E.ACT[it.code]?'ฝากครูร่วมกิจกรรมดูแล':'ครูร่วมสอนดูแล';
   return '<span style="color:var(--bad)">ยังไม่ได้จัด</span>';
 }
+/* คำเตือน: ผู้รับคาบ (สอนแทน/คู่สลับ) ติดประชุม/PLC ในคาบนั้น */
+function meetWarn(it){ const w = E.ackWho(it); if (w==null || it.ack==='declined') return ''; const m = E.meetingAt(w, it.date, it.p);
+  return m ? `<div class="tiny" style="color:var(--warn)">⚠ ${esc(sn(w))} ติด ${esc(m)} คาบนี้</div>` : ''; }
 function loadBar(l){ let h=''; for (let i=0;i<Math.max(6,l.total);i++) h+=`<i class="${i<l.base?'f':i<l.total?'s':''}"></i>`; return `<span class="load" title="สอนตามตาราง ${l.base} + สอนแทน ${l.extra}">${h}</span>`; }
 function itemEditor(r, it){
   const open = UI.open===it.id, co = E.coTeachers(r,it), act = !!E.ACT[it.code];
@@ -1048,11 +1061,12 @@ function itemEditor(r, it){
   if (tab==='sub'){
     const c = E.candSub(r,it); UI.cache[it.id]=c; const lim = UI.more[it.id] ? c.avail.length : 6;
     const firstOther = c.avail.findIndex(a=>!a.same);
-    body += `<div class="small muted" style="margin-bottom:6px">ครูที่ว่างจริง ${c.avail.length} คน · เรียง <b>กลุ่มสาระเดียวกันก่อน</b> แล้วตาม <b>จำนวนคาบสอนวันนั้นน้อย→มาก</b> (เท่ากันดูจำนวนสอนแทนสะสม)</div>
+    const nMeet = c.avail.filter(a=>a.meet).length;
+    body += `<div class="small muted" style="margin-bottom:6px">ครูที่จัดได้ ${c.avail.length} คน${nMeet?` (ติดประชุม/PLC ${nMeet} คน — จัดได้แต่ต้องขาดประชุม แสดงไว้ท้ายกลุ่ม)`:''} · เรียง <b>กลุ่มสาระเดียวกันก่อน</b> แล้วตาม <b>จำนวนคาบสอนวันนั้นน้อย→มาก</b> (เท่ากันดูจำนวนสอนแทนสะสม)</div>
       ${c.avail.length?`<div class="cand-h"><span>#</span><span>ครู</span><span>คาบวันนั้น</span><span class="hm">สอนแทนสะสม</span><span class="hm"></span></div>`:''}
       ${c.avail.slice(0,lim).map((a,i)=>`${i===firstOther&&i>0?`<div class="tiny muted" style="padding:6px 10px;border-top:1px dashed var(--line)">ครูต่างกลุ่มสาระ</div>`:''}
       <div class="cand ${it.method==='sub'&&it.sub===a.ti&&it.ack!=='declined'?'sel':''}" data-act="pick" data-iid="${it.id}" data-ti="${a.ti}">
-        <span class="rk">${i+1}</span><span class="nm">${esc(tn(a.ti))} <small>${gtag(gOf(a.ti))} ${a.duty?`<span style="color:var(--warn)">⚠ ${esc(a.duty)}</span>`:''}</small></span>
+        <span class="rk">${i+1}</span><span class="nm">${esc(tn(a.ti))} <small>${gtag(gOf(a.ti))} ${a.duty?`<span style="color:var(--warn)">⚠ ${esc(a.duty)}</span>`:''} ${a.meet?`<span class="chip s-ack">⚠ ติด ${esc(a.meet)}</span>`:''}</small></span>
         <span class="row" style="gap:6px">${loadBar(a.load)}<b class="num">${a.load.total}</b></span><span class="num hm">${a.cum}</span>
         <span class="hm">${a.same?'<span class="chip s-approved">กลุ่มเดียวกัน</span>':''}</span></div>`).join('')}
       ${!c.avail.length?`<div class="note warn">ไม่มีครูว่างจริงในคาบนี้ — ลองใช้ “สลับคาบกับครูอื่น” หรือ “สลับคาบว่าง”</div>`:''}
@@ -1091,11 +1105,13 @@ function draftPayload(){
 }
 function confirmSubmit(){
   const r=W.req, ci=E.coverItems(r);
-  const rows = ci.map(it=>`<tr><td class="nowrap">${fmtD(it.date)} คาบ ${it.p}</td><td>${esc(it.cls)} · ${esc(it.code)}</td><td>${METHODS[it.method].label}</td><td>${pickedText(it)}</td></tr>`).join('');
+  const rows = ci.map(it=>`<tr><td class="nowrap">${fmtD(it.date)} คาบ ${it.p}</td><td>${esc(it.cls)} · ${esc(it.code)}</td><td>${METHODS[it.method].label}</td><td>${pickedText(it)}${meetWarn(it)}</td></tr>`).join('');
+  const nMeet = ci.filter(it=>meetWarn(it)).length;
   const nAck = new Set(ci.map(E.ackWho).filter(x=>x!=null)).size;
   modal(`<div class="modal"><div class="modal-h"><h3>ตรวจสอบก่อนส่ง</h3><button class="x" data-act="close">×</button></div><div class="modal-b">
     <div class="row" style="margin-bottom:10px">${tyChip(r.type)}<b>${esc(tn(r.teacher))}</b><span class="muted">${r.dates.map(d=>fmtD(d)+(r.slots&&r.slots[d]?` (คาบ ${r.slots[d].join(', ')})`:'')).join(', ')}</span></div>
     ${ci.length?`<div class="tbl-wrap"><table class="t"><thead><tr><th>วัน/คาบ</th><th>ห้อง/วิชา</th><th>วิธีจัด</th><th>ผู้รับผิดชอบ</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="muted">ไม่มีคาบที่ต้องจัดสอนแทน</div>'}
+    ${nMeet?`<div class="note warn" style="margin-top:12px">มี <b>${nMeet} คาบ</b> ที่ผู้สอนแทนติดประชุม/PLC ในคาบเดียวกัน — ผู้สอนแทนจะต้องขาดประชุม ควรแจ้งประธานการประชุมด้วย</div>`:''}
     <div class="note" style="margin-top:12px">เมื่อส่งแล้ว ระบบแจ้งครูที่ถูกจัด <b>${nAck} คน</b> ให้กดรับทราบ → เมื่อรับทราบครบ ส่งให้หัวหน้ากลุ่มบริหารงานวิชาการเห็นชอบ → <b>สมบูรณ์</b></div>
   </div><div class="modal-f"><button class="btn" data-act="close">กลับไปแก้ไข</button><button class="btn gold" data-act="wsend">ยืนยันส่ง</button></div></div>`);
 }
@@ -1120,7 +1136,7 @@ function vInbox(){
   const card = ({r,it},act) => `<div class="card" style="margin-bottom:10px"><div class="card-b">
     <div class="row"><span class="per">${fmtD(it.date)} · คาบ ${it.p}</span><span class="tiny muted">${perT(it.p)}</span><b>${esc(it.cls)}</b><span>${esc(it.code)} ${esc(it.subj)}</span>${tyChip(r.type)}</div>
     <div style="margin-top:8px">${it.method==='sub'?`<b>สอนแทน</b> ${esc(tn(r.teacher))} ${gtag(gOf(r.teacher))} · ${esc(it.room)}`
-      : `<b>สลับคาบ</b> กับ ${esc(tn(r.teacher))} — คุณสอนคาบนี้ และ ${esc(sn(r.teacher))} จะไปสอน ${esc(it.swap.code||'')} ของคุณ ${fmtD(it.swap.date)} คาบ ${it.swap.p}`}</div>
+      : `<b>สลับคาบ</b> กับ ${esc(tn(r.teacher))} — คุณสอนคาบนี้ และ ${esc(sn(r.teacher))} จะไปสอน ${esc(it.swap.code||'')} ของคุณ ${fmtD(it.swap.date)} คาบ ${it.swap.p}`}</div>${(()=>{ const m=E.meetingAt(ME.ti,it.date,it.p); return m?`<div class="note warn" style="margin-top:8px">⚠ คาบนี้ตรงกับ <b>${esc(m)}</b> ของท่าน — หากรับทราบ ท่านจะต้องขาดประชุมคาบนี้</div>`:''; })()}
     <div class="small muted" style="margin-top:4px">${r.id} · จัดโดย ${esc(arrName(r))} · ${fmtDT(r.createdAt)}${r.reason?' · '+esc(r.reason):''}</div>
     ${act?`<div class="row" style="margin-top:10px"><button class="btn ok" data-act="ack" data-rid="${r.id}" data-iid="${it.id}">${ICON.check} รับทราบ</button>
       <button class="btn bad" data-act="decline" data-rid="${r.id}" data-iid="${it.id}">ขอเปลี่ยน (ไม่สะดวก)</button><span class="sp"></span><button class="btn sm" data-act="open" data-rid="${r.id}">รายละเอียด</button></div>`
@@ -1355,7 +1371,7 @@ function renderDetail(){
   const s2 = st==='fix'?'err': need.length===ok?'done':'cur', s3 = st==='approved'?'done':st==='returned'?'err':st==='review'?'cur':'', s4 = st==='approved'?'done':'';
   const rows = ci.map(it=>{ const w=E.ackWho(it), mine = it.ack==='pending' && w===ME.ti && r.status!=='cancelled';
     return `<tr><td class="nowrap"><b>${fmtD(it.date)}</b> คาบ ${it.p}<div class="tiny muted">${perT(it.p)}</div></td><td><b>${esc(it.cls)}</b><div class="small">${esc(it.code)} ${esc(it.subj)}</div></td>
-      <td>${METHODS[it.method]?.label||'-'}</td><td class="small">${pickedText(it)}${it.ack==='declined'&&it.sub!=null?`<div class="tiny muted">(เดิม ${esc(sn(it.sub))})</div>`:''}${it.ack==='declined'&&it.method==='swapT'?`<div class="tiny muted">(เดิม ${esc(sn(it.swap.t))})</div>`:''}</td>
+      <td>${METHODS[it.method]?.label||'-'}</td><td class="small">${pickedText(it)}${meetWarn(it)}${it.ack==='declined'&&it.sub!=null?`<div class="tiny muted">(เดิม ${esc(sn(it.sub))})</div>`:''}${it.ack==='declined'&&it.method==='swapT'?`<div class="tiny muted">(เดิม ${esc(sn(it.swap.t))})</div>`:''}</td>
       <td>${E.ackNeeded(it)?ackChip(it.ack):ackChip(null)}${it.ackAt?`<div class="tiny muted">${fmtDT(it.ackAt)}</div>`:''}${it.declNote?`<div class="tiny" style="color:var(--bad)">“${esc(it.declNote)}”</div>`:''}</td>
       <td class="nowrap">${mine?`<button class="btn sm ok" data-act="ack" data-rid="${r.id}" data-iid="${it.id}">รับทราบ</button> <button class="btn sm bad" data-act="decline" data-rid="${r.id}" data-iid="${it.id}">ขอเปลี่ยน</button>`:''}
         ${owner && it.ack==='declined' && r.status==='open'?`<button class="btn sm gold" data-act="fixitem" data-rid="${r.id}" data-iid="${it.id}">จัดใหม่</button>`:''}</td></tr>`; }).join('');

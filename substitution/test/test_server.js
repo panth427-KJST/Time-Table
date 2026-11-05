@@ -126,6 +126,42 @@ let freeP = null; for (let p = 1; p <= 9; p++) if (p !== pair.p && !E.TAT[pair.a
 if (freeP) ok(!E.busy(pair.a, d2, freeP, E.occupancy(null)), 'A ลาคาบ ' + pair.p + ' แต่ยังว่างคาบ ' + freeP + ' วันเดียวกัน');
 ok(!!E.busy(pair.a, d2, pair.p, E.occupancy(null)), 'A ไม่ว่างในคาบที่ลา');
 
+/* ---------------------------------------------------------------- 3b. ครูติดประชุม/PLC */
+console.log('3b) จัดครูที่ติดประชุม/PLC ได้ พร้อมคำเตือน');
+c = H.ctx_(); E = c.E;
+let mcase = null;
+for (let k = 2; k < 10 && !mcase; k++) {
+  const d = E.nthSchool(k), w = H.SubEngine.wd(d);
+  for (const t of teachersOn(d)) {
+    if (c.requests.some(q => q.teacher === t && q.dates.includes(d))) continue;
+    for (const it of E.buildItems(t, [d])) {
+      if (E.NT[it.code] || E.ACT[it.code]) continue;
+      const req = { id: '(m)', type: 'official', teacher: t, dates: [d], slots: { [d]: [it.p] }, status: 'open', items: [it] };
+      const cs = E.candSub(req, it).avail, m = cs.find(a => a.meet);
+      if (m && cs.some(a => !a.meet && a.same === m.same)) { mcase = { t, d, it, m, cs, req }; break; }
+    }
+    if (mcase) break;
+  }
+}
+ok(!!mcase, 'พบกรณีที่มีครูติดประชุม/PLC ในคาบที่ต้องหาคนแทน');
+if (mcase) {
+  const { t, d, it, m, cs } = mcase;
+  ok(/PLC|ประชุม/.test(m.meet), 'ครูที่ติดประชุมอยู่ในรายชื่อที่จัดได้ พร้อมชื่อการประชุม', m.meet);
+  const grp = cs.filter(a => a.same === m.same), lastFree = grp.map(a => !a.meet).lastIndexOf(true), firstMeet = grp.findIndex(a => a.meet);
+  ok(lastFree < firstMeet, 'ในกลุ่มเดียวกัน ครูที่ว่างจริงขึ้นก่อนครูที่ติดประชุม');
+  ok(E.meetingAt(m.ti, d, it.p) === m.meet, 'meetingAt() คืนชื่อการประชุม');
+  r = H.apiSubmit(tok(t), { type: 'official', teacher: t, dates: [d], slots: { [d]: [it.p] }, reason: 'test', items: [{ id: it.id, method: 'sub', sub: m.ti }] });
+  ok(r.ok, 'server ยอมรับการจัดครูที่ติดประชุม', r.error);
+  c = H.ctx_();
+  ok(c.E.busy(m.ti, d, it.p, c.E.occupancy(null)).kind === 'sub', 'หลังจัดแล้ว ครูคนนั้นไม่ว่างในคาบนั้น (กันจองซ้ำ)');
+  ok(c.E.dayLoad(m.ti, d, c.E.occupancy(null)).extra >= 1, 'นับเป็นภาระสอนแทนของวันนั้น');
+  if (r.ok) H.apiCancel(tok(t), r.data.id, 'test');
+  // สลับคาบยังถือว่าคาบประชุมไม่ว่าง
+  c = H.ctx_(); E = c.E;
+  const sw = E.candSwapT(mcase.req, it).list.concat([]);
+  ok(sw.every(o => !E.meetingAt(o.t, d, it.p) && !E.meetingAt(t, o.date, o.p)), 'สลับคาบ: ไม่เลือกคาบที่ติดประชุม (คงเดิม)');
+}
+
 /* ---------------------------------------------------------------- 4. รับทราบ / ขอเปลี่ยน / จัดใหม่ / เห็นชอบ */
 console.log('4) ขั้นตอนรับทราบ → เห็นชอบ');
 const itA = rA.items[0];
@@ -164,7 +200,7 @@ ok(r.ok, 'B ส่งคำขอ');
 const Z = draftB2.items[0].sub;
 r = H.apiCancel(tok(pair.b), idB, 'เปลี่ยนแผน');
 c = H.ctx_();
-ok(r.ok && !c.E.busy(Z, d2, pair.p, c.E.occupancy(null)), 'ยกเลิก → ครูที่ถูกจัดว่างทันที');
+ok(r.ok && [undefined, null, 'meet'].includes((c.E.busy(Z, d2, pair.p, c.E.occupancy(null)) || {}).kind), 'ยกเลิก → ครูที่ถูกจัดว่างทันที');
 r = H.apiSubmit(tok(pair.b), mk(c.E, pair.b, 'official', [d2], sl)); const idB2 = r.data.id;
 r = H.apiReturn(tok(pair.b), idB2, 'x');
 ok(!r.ok, 'ครูทั่วไปส่งกลับไม่ได้');

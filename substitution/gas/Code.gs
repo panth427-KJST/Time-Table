@@ -129,8 +129,16 @@ var SubEngine = (function () {
       var o = O.occ[K(ti, d, p)];
       if (o) return { kind: 'sub', why: 'ถูกจัด' + o.t + ' ' + o.cls + ' ให้ ' + shortName(o.r.teacher) + ' แล้ว' };
       var w = wd(d), e = w >= 0 && TAT[ti] && TAT[ti][w][p];
-      if (e && !O.freed[K(ti, d, p)]) return { kind: 'base', why: 'มีสอน ' + e.code + ' ' + e.cls };
+      if (e && !O.freed[K(ti, d, p)]) {
+        if (NT[e.code]) return { kind: 'meet', why: 'ติด ' + e.subj, meet: e.subj };   // ประชุม/PLC: จัดสอนแทนได้ แต่ต้องเตือน
+        return { kind: 'base', why: 'มีสอน ' + e.code + ' ' + e.cls };
+      }
       return null;
+    }
+    /* คาบประชุม/PLC ของครู ณ ช่องนั้น (ถ้ามี) — ใช้แสดงคำเตือน */
+    function meetingAt(ti, d, p) {
+      var w = wd(d), e = w >= 0 && TAT[ti] && TAT[ti][w][p];
+      return e && NT[e.code] ? e.subj : null;
     }
     function shortName(ti) {
       var t = D.teachers[ti]; if (!t) return '?';
@@ -166,11 +174,13 @@ var SubEngine = (function () {
         if (ti === req.teacher) return;
         if (dec.indexOf(ti) >= 0) { blocked.push({ ti: ti, same: t.g === g, why: 'ขอเปลี่ยนคาบนี้ไปแล้ว' }); return; }
         var b = busy(ti, item.date, item.p, O);
-        if (!b) avail.push({ ti: ti, same: t.g === g, load: dayLoad(ti, item.date, O), cum: C[ti] || 0, duty: DUTY[ti] && DUTY[ti][w] && DUTY[ti][w][item.p] });
+        if (!b || b.kind === 'meet') avail.push({ ti: ti, same: t.g === g, load: dayLoad(ti, item.date, O), cum: C[ti] || 0,
+          duty: DUTY[ti] && DUTY[ti][w] && DUTY[ti][w][item.p], meet: b ? b.meet : null });
         else if (b.kind !== 'base') blocked.push({ ti: ti, same: t.g === g, why: b.why });
       });
+      // กลุ่มสาระเดียวกันก่อน → ครูที่ว่างจริงก่อนครูที่ติดประชุม → คาบสอนวันนั้นน้อย→มาก → สอนแทนสะสม
       avail.sort(function (a, b) {
-        return (b.same - a.same) || (a.load.total - b.load.total) || (a.cum - b.cum) ||
+        return (b.same - a.same) || ((a.meet ? 1 : 0) - (b.meet ? 1 : 0)) || (a.load.total - b.load.total) || (a.cum - b.cum) ||
           D.teachers[a.ti].n.localeCompare(D.teachers[b.ti].n, 'th');
       });
       blocked.sort(function (a, b) { return b.same - a.same; });
@@ -375,7 +385,7 @@ var SubEngine = (function () {
       D: D, TAT: TAT, CAT: CAT, DUTY: DUTY, NT: NT, ACT: ACT, today: today, settings: st,
       gOf: gOf, levelOf: levelOf, shortName: shortName,
       isSchool: isSchool, schoolDays: schoolDays, maxDate: maxDate, minStart: minStart, nthSchool: nthSchool,
-      occupancy: occupancy, busy: busy, leaveAt: leaveAt, leaveCovers: leaveCovers, dayLoad: dayLoad, cumSubs: cumSubs,
+      occupancy: occupancy, busy: busy, meetingAt: meetingAt, leaveAt: leaveAt, leaveCovers: leaveCovers, dayLoad: dayLoad, cumSubs: cumSubs,
       candSub: candSub, candSwapT: candSwapT, candSwapF: candSwapF, coTeachers: coTeachers, allowNone: allowNone,
       buildItems: buildItems, ackNeeded: ackNeeded, ackWho: ackWho, coverItems: coverItems, rst: rst,
       checkItem: checkItem, validateDraft: validateDraft, ownDutyConflicts: ownDutyConflicts

@@ -9,7 +9,7 @@
 | `gas/` | ไฟล์ที่ต้องวางใน Apps Script: `Code.gs`, `Index.html`, `TimetableData.html`, `appsscript.json` |
 | [`Substitution-Demo-2-2569.html`](Substitution-Demo-2-2569.html) | **โหมดทดลอง** เปิดในเบราว์เซอร์ได้ทันที — โค้ดชุดเดียวกับของจริง ใช้ Google Sheet จำลองในเบราว์เซอร์ |
 | `src/` | โค้ดต้นฉบับ: `engine.js` (กฎ/การคำนวณ ใช้ร่วมทั้ง server และหน้าเว็บ), `importer.js` (อ่าน Excel), `server.js`, `client.html`, `fakegas.js`, `demo_boot.js` |
-| `test/` | ทดสอบอัตโนมัติ: `test_server.js` (77 กรณี), `test_e2e.js` (39 กรณี ผ่านเบราว์เซอร์) |
+| `test/` | ทดสอบอัตโนมัติ: `test_server.js` (85 กรณี), `test_e2e.js` (39 กรณี ผ่านเบราว์เซอร์) |
 | `data/timetable-db-2-2569.xlsx` | **ฐานข้อมูลตารางเรียนตารางสอน (แหล่งข้อมูลหลัก)** — เมื่อตารางเปลี่ยน ส่งไฟล์ใหม่มาแทนที่ |
 | `build.py` | สร้าง `gas/`, demo และ `data/timetable-2-2569.json` จากไฟล์ Excel |
 
