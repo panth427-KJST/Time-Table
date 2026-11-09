@@ -73,6 +73,15 @@ var SubEngine = (function () {
     var K = function (t, d, p) { return t + '|' + d + '|' + p; };
     var gOf = function (ti) { return D.teachers[ti] ? D.teachers[ti].g : -1; };
     var levelOf = function (cls) { var m = String(cls).match(/^ม\.\d/); return m ? m[0] : ''; };
+    /* ห้องเรียนไม่อยู่ (นักเรียนไปราชการ/ทัศนศึกษา ฯลฯ) — แอดมินกำหนด: settings.classAway = [{id,date,classes,periods,reason,status}] */
+    var AW = {};
+    (settings.classAway || []).forEach(function (a) {
+      if (a.status === 'cancelled') return;
+      var ps = a.periods && a.periods.length ? a.periods : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+      (a.classes || []).forEach(function (c) { ps.forEach(function (p) { AW[c + '|' + a.date + '|' + p] = a; }); });
+    });
+    function classAwayAt(cls, d, p) { return AW[cls + '|' + d + '|' + p] || null; }
+    function itemAway(it) { return classAwayAt(it.cls, it.date, it.p); }   // คาบนี้นักเรียนไม่อยู่ = ไม่ต้องสอน
 
     function isSchool(s) { return wd(s) >= 0 && st.holidays.indexOf(s) < 0 && s >= st.termStart && s <= st.termEnd; }
     function schoolDays(a, b) { var r = []; for (var s = a, n = 0; s <= b && n < 400; s = addD(s, 1), n++) if (isSchool(s)) r.push(s); return r; }
@@ -102,7 +111,7 @@ var SubEngine = (function () {
         r.dates.forEach(function (d) { (O.leave[r.teacher + '|' + d] = O.leave[r.teacher + '|' + d] || []).push(r); });
         r.items.forEach(function (it) {
           if (it === skipItem || (skipItem && r === extra && it.id === skipItem.id)) return;
-          if (it.ack === 'declined' || !it.method || it.method === 'none') return;
+          if (it.ack === 'declined' || !it.method || it.method === 'none' || itemAway(it)) return;
           var s = it.swap;
           if (it.method === 'sub') O.occ[K(it.sub, it.date, it.p)] = { t: 'สอนแทน', cls: it.cls, r: r, it: it };
           else if (it.method === 'swapT') {
@@ -128,7 +137,7 @@ var SubEngine = (function () {
       var o = O.occ[K(ti, d, p)];
       if (o) return { kind: 'sub', why: 'ถูกจัด' + o.t + ' ' + o.cls + ' ให้ ' + shortName(o.r.teacher) + ' แล้ว' };
       var w = wd(d), e = w >= 0 && TAT[ti] && TAT[ti][w][p];
-      if (e && !O.freed[K(ti, d, p)]) {
+      if (e && !O.freed[K(ti, d, p)] && !classAwayAt(e.cls, d, p)) {
         if (NT[e.code]) return { kind: 'meet', why: 'ติด ' + e.subj, meet: e.subj };   // ประชุม/PLC: จัดสอนแทนได้ แต่ต้องเตือน
         return { kind: 'base', why: 'มีสอน ' + e.code + ' ' + e.cls };
       }
@@ -148,7 +157,7 @@ var SubEngine = (function () {
       for (var p = 1; p <= 9; p++) {
         var e = TAT[ti] && TAT[ti][w][p];
         if (O.occ[K(ti, d, p)]) extra++;
-        else if (e && !NT[e.code] && !O.freed[K(ti, d, p)]) base++;
+        else if (e && !NT[e.code] && !O.freed[K(ti, d, p)] && !classAwayAt(e.cls, d, p)) base++;
       }
       return { base: base, extra: extra, total: base + extra };
     }
@@ -157,7 +166,7 @@ var SubEngine = (function () {
       requests.forEach(function (r) {
         if (!active(r)) return;
         r.items.forEach(function (it) {
-          if (it.ack === 'declined') return;
+          if (it.ack === 'declined' || itemAway(it)) return;
           if (it.method === 'sub') c[it.sub] = (c[it.sub] || 0) + 1;
           if (it.method === 'swapT') c[it.swap.t] = (c[it.swap.t] || 0) + 1;
         });
@@ -174,7 +183,8 @@ var SubEngine = (function () {
         if (dec.indexOf(ti) >= 0) { blocked.push({ ti: ti, same: t.g === g, why: 'ขอเปลี่ยนคาบนี้ไปแล้ว' }); return; }
         var b = busy(ti, item.date, item.p, O);
         if (!b || b.kind === 'meet') avail.push({ ti: ti, same: t.g === g, load: dayLoad(ti, item.date, O), cum: C[ti] || 0,
-          duty: DUTY[ti] && DUTY[ti][w] && DUTY[ti][w][item.p], meet: b ? b.meet : null });
+          duty: DUTY[ti] && DUTY[ti][w] && DUTY[ti][w][item.p], meet: b ? b.meet : null,
+          freedBy: (function () { var e = TAT[ti] && TAT[ti][w][item.p]; return e && classAwayAt(e.cls, item.date, item.p) ? e.cls : null; })() });
         else if (b.kind !== 'base') blocked.push({ ti: ti, same: t.g === g, why: b.why });
       });
       // กลุ่มสาระเดียวกันก่อน → ครูที่ว่างจริงก่อนครูที่ติดประชุม → คาบสอนวันนั้นน้อย→มาก → สอนแทนสะสม
@@ -199,6 +209,7 @@ var SubEngine = (function () {
         for (var p = 1; p <= 9; p++) {
           var ce = CAT[item.cls][w][p];
           if (!ce || NT[ce.code] || ACT[ce.code] || ce.tis.length !== 1 || ce.tis[0] === req.teacher) continue;
+          if (classAwayAt(item.cls, d, p)) continue;                       // ห้องนี้ไม่อยู่ในคาบนั้น
           var B = ce.tis[0];
           if (O.freed[K(B, d, p)] || leaveAt(O, B, d, p)) continue;
           if ((item.declinedBy || []).indexOf(B) >= 0) continue;
@@ -220,7 +231,7 @@ var SubEngine = (function () {
         var w = wd(d);
         for (var p = 1; p <= 9; p++) {
           if (CAT[item.cls][w][p] || p === lunch) continue;
-          if (O.classIn[item.cls + '|' + d + '|' + p]) continue;
+          if (O.classIn[item.cls + '|' + d + '|' + p] || classAwayAt(item.cls, d, p)) continue;
           if (busy(req.teacher, d, p, O)) continue;
           list.push({ date: d, p: p });
         }
@@ -252,8 +263,9 @@ var SubEngine = (function () {
           var e = TAT[teacher] && TAT[teacher][w][p];
           if (!e) continue;
           if (slots && slots[d] && slots[d].indexOf(p) < 0) continue;
+          var aw = classAwayAt(e.cls, d, p);
           items.push({ id: d + '-' + p, date: d, p: p, code: e.code, subj: e.subj, cls: e.cls, room: e.room,
-            method: NT[e.code] ? 'none' : null, ack: null });
+            method: NT[e.code] || aw ? 'none' : null, ack: null });
         }
       });
       return items;
@@ -262,17 +274,20 @@ var SubEngine = (function () {
     /* ---------- สถานะ ---------- */
     function ackNeeded(it) { return it.method === 'sub' || it.method === 'swapT'; }
     function ackWho(it) { return it.method === 'sub' ? it.sub : it.method === 'swapT' ? it.swap.t : null; }
-    function coverItems(r) { return r.items.filter(function (i) { return !NT[i.code]; }); }
+    function coverItems(r) { return r.items.filter(function (i) { return !NT[i.code] && !itemAway(i); }); }
+    function awayItems(r) { return r.items.filter(function (i) { return !NT[i.code] && itemAway(i); }); }
     function rst(r) {
       if (r.status === 'cancelled' || r.status === 'approved' || r.status === 'returned') return r.status;
-      if (r.items.some(function (i) { return i.ack === 'declined'; })) return 'fix';
-      if (r.items.some(function (i) { return i.ack === 'pending'; })) return 'ack';
+      var live = r.items.filter(function (i) { return !itemAway(i); });          // คาบที่นักเรียนไม่อยู่ ไม่ต้องรอรับทราบ
+      if (live.some(function (i) { return i.ack === 'declined'; })) return 'fix';
+      if (live.some(function (i) { return i.ack === 'pending'; })) return 'ack';
       return 'review';
     }
 
     /* ---------- ตรวจความถูกต้องของตัวเลือกรายคาบ (server ใช้ก่อนบันทึก) ---------- */
     function checkItem(req, it) {
       var ok;
+      if (itemAway(it)) return null;
       if (!it.method) return 'ยังไม่ได้เลือกวิธีจัด';
       if (it.method === 'none') return allowNone(req, it) ? null : 'คาบนี้ไม่มีครูร่วมสอน ต้องเลือกวิธีจัด';
       if (it.method === 'sub') {
@@ -340,7 +355,7 @@ var SubEngine = (function () {
       var chosen = {};
       (draft.items || []).forEach(function (i) { chosen[i.id] = i; });
       req.items.forEach(function (it) {
-        if (NT[it.code]) return;
+        if (NT[it.code] || itemAway(it)) return;
         var c = chosen[it.id] || {};
         it.method = c.method || null;
         if (it.method === 'sub') it.sub = +c.sub;
@@ -357,7 +372,7 @@ var SubEngine = (function () {
         }
       });
       req.items.forEach(function (it) {
-        if (NT[it.code]) return;
+        if (NT[it.code] || itemAway(it)) return;
         var e = checkItem(req, it);
         if (e) errors.push(it.date + ' คาบ ' + it.p + ' (' + it.cls + '): ' + e);
       });
@@ -371,7 +386,7 @@ var SubEngine = (function () {
       requests.forEach(function (q) {
         if (!active(q) || q.id === r.id) return;
         q.items.forEach(function (it) {
-          if (it.ack === 'declined') return;
+          if (it.ack === 'declined' || itemAway(it)) return;
           if (ackWho(it) === r.teacher && leaveCovers(r, it.date, it.p)) out.push({ r: q, it: it, date: it.date, p: it.p });
           if ((it.method === 'swapT' || it.method === 'swapF') && q.teacher === r.teacher && leaveCovers(r, it.swap.date, it.swap.p))
             out.push({ r: q, it: it, date: it.swap.date, p: it.swap.p });
@@ -384,7 +399,7 @@ var SubEngine = (function () {
       D: D, TAT: TAT, CAT: CAT, DUTY: DUTY, NT: NT, ACT: ACT, today: today, settings: st,
       gOf: gOf, levelOf: levelOf, shortName: shortName,
       isSchool: isSchool, schoolDays: schoolDays, maxDate: maxDate, minStart: minStart, nthSchool: nthSchool,
-      occupancy: occupancy, busy: busy, meetingAt: meetingAt, leaveAt: leaveAt, leaveCovers: leaveCovers, dayLoad: dayLoad, cumSubs: cumSubs,
+      occupancy: occupancy, busy: busy, meetingAt: meetingAt, classAwayAt: classAwayAt, itemAway: itemAway, awayItems: awayItems, leaveAt: leaveAt, leaveCovers: leaveCovers, dayLoad: dayLoad, cumSubs: cumSubs,
       candSub: candSub, candSwapT: candSwapT, candSwapF: candSwapF, coTeachers: coTeachers, allowNone: allowNone,
       buildItems: buildItems, ackNeeded: ackNeeded, ackWho: ackWho, coverItems: coverItems, rst: rst,
       checkItem: checkItem, validateDraft: validateDraft, ownDutyConflicts: ownDutyConflicts

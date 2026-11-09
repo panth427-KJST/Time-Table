@@ -268,6 +268,82 @@ ok(H.ctx_().requests.length > 0, 'ข้อมูลการจัดสอน�
 r = H.apiGetLog(bossTok, 'เห็นชอบ');
 ok(r.ok && r.rows.length >= 1, 'ค้นหาบันทึกระบบ');
 
+/* ---------------------------------------------------------------- 7b. ห้องเรียนไปราชการ */
+console.log('7b) ห้องเรียนไปราชการ (นักเรียนไม่อยู่ทั้งห้อง)');
+{
+  let c7 = H.ctx_(), E7 = c7.E, found = null;
+  for (let k = 3; k < 12 && !found; k++) {
+    const d = E7.nthSchool(k), w = H.SubEngine.wd(d);
+    for (const cls of ['ม.5/1', 'ม.5/2', 'ม.4/1', 'ม.3/1']) {
+      for (let p = 1; p <= 9 && !found; p++) {
+        const ce = E7.CAT[cls][w][p];
+        if (!ce || E7.NT[ce.code] || E7.ACT[ce.code] || ce.tis.length !== 1) continue;
+        const T = ce.tis[0];
+        if (c7.requests.some(q => q.teacher === T && q.dates.includes(d))) continue;
+        // ครู U อีกคนที่สอนห้องอื่นในคาบเดียวกัน (เพื่อดูว่า T รับคาบแทนได้)
+        const U = TT.teachers.map((t, i) => i).find(i => i !== T && E7.TAT[i][w][p] && !E7.NT[E7.TAT[i][w][p].code] && !E7.ACT[E7.TAT[i][w][p].code]
+          && E7.TAT[i][w][p].cls !== cls && !c7.requests.some(q => q.teacher === i && q.dates.includes(d)));
+        if (U != null) found = { d, cls, p, T, U };
+      }
+      if (found) break;
+    }
+  }
+  ok(!!found, 'พบกรณีทดสอบ', JSON.stringify(found));
+  const { d, cls, p, T, U } = found;
+  // 1) ก่อนกำหนด: T ลาคาบนั้น → ต้องจัดสอนแทน, เลือกครู S
+  const sl = { [d]: [p] };
+  let dr = mk(E7, T, 'official', [d], sl);
+  const S = dr.items[0].sub;
+  r = H.apiSubmit(tok(T), dr); const idT = r.data && r.data.id;
+  ok(r.ok && S != null, 'ก่อนกำหนด: ครูที่ลาต้องจัดสอนแทนคาบห้อง ' + cls, r.error);
+  // 2) สิทธิ์ + ตรวจข้อมูล
+  r = H.apiSaveClassAway(tok(T), { date: d, classes: [cls], reason: 'x' });
+  ok(!r.ok && /เฉพาะ/.test(r.error), 'ครูทั่วไปกำหนดห้องไปราชการไม่ได้');
+  r = H.apiSaveClassAway(bossTok, { date: '2026-12-10', classes: [cls], reason: 'x' });
+  ok(!r.ok, 'วันหยุด → ปฏิเสธ');
+  r = H.apiSaveClassAway(bossTok, { date: d, classes: [cls], reason: '' });
+  ok(!r.ok, 'ต้องระบุรายการ/เหตุผล');
+  // 3) แอดมินกำหนด: ห้อง cls ไปราชการทั้งวัน
+  r = H.apiSaveClassAway(bossTok, { date: d, classes: [cls, 'ไม่มีห้องนี้'], reason: 'นำนักเรียนแข่งขันทักษะวิชาการ' });
+  const awId = r.data && r.data.id;
+  ok(r.ok && /^CA-/.test(awId) && r.data.moot.some(x => x.startsWith(idT)), 'บันทึกห้องไปราชการ + แจ้งรายการที่กลายเป็นไม่ต้องสอน', JSON.stringify(r.data || r.error));
+  ok(H.readRows_('away').length === 1 && H.readRows_('away')[0].classes === cls, 'บันทึกในชีต ClassAway (กรองห้องที่ไม่มีจริงออก)');
+  c7 = H.ctx_(); E7 = c7.E;
+  const rT = c7.requests.find(q => q.id === idT);
+  ok(E7.itemAway(rT.items[0]) && E7.coverItems(rT).length === 0, 'คำขอเดิม: คาบห้อง ' + cls + ' ไม่ต้องสอนแล้ว');
+  ok(E7.rst(rT) === 'review', 'ไม่ต้องรอผู้สอนแทนรับทราบคาบนั้นแล้ว', E7.rst(rT));
+  ok(!E7.busy(S, d, p, E7.occupancy(null)) || E7.busy(S, d, p, E7.occupancy(null)).kind !== 'sub', 'คืนเวลาว่างให้ผู้สอนแทนเดิม');
+  ok(H.readRows_('items').find(x => x.request_id === idT).request_status === 'รอเห็นชอบ', 'ชีต Items อัปเดตสถานะ');
+  H.apiCancel(tok(T), idT, 'test');
+  // 4) ครู T ที่สอนห้องนั้น อยู่ปฏิบัติหน้าที่ → ว่าง รับคาบแทนได้
+  c7 = H.ctx_(); E7 = c7.E;
+  ok(E7.busy(T, d, p, E7.occupancy(null)) === null, 'ครูที่สอนห้องนั้นว่างในคาบนั้น');
+  const itU = E7.buildItems(U, [d], { [d]: [p] })[0];
+  const candU = E7.candSub({ id: '(u)', type: 'official', teacher: U, dates: [d], slots: { [d]: [p] }, status: 'open', items: [itU] }, itU).avail;
+  const tRow = candU.find(a => a.ti === T);
+  ok(tRow && tRow.freedBy === cls, 'ครูที่สอนห้องนั้นอยู่ในรายชื่อรับคาบแทน พร้อมเหตุผล “' + cls + ' ไม่อยู่”');
+  r = H.apiSubmit(tok(U), { type: 'official', teacher: U, dates: [d], slots: { [d]: [p] }, reason: 't', items: [{ id: itU.id, method: 'sub', sub: T }] });
+  ok(r.ok, 'จัดครูคนนั้นสอนแทนได้จริง (server ยอมรับ)', r.error);
+  const idU = r.data && r.data.id;
+  // 5) ครู T ลาทั้งวัน → คาบห้องที่ไม่อยู่ไม่ต้องจัด
+  c7 = H.ctx_(); E7 = c7.E;
+  const itsT = E7.buildItems(T, [d]);
+  const awayIt = itsT.find(i => i.p === p);
+  ok(awayIt.method === 'none' && E7.itemAway(awayIt), 'ครูที่ลา: คาบห้องไปราชการไม่ต้องจัดสอนแทน');
+  const dT = mk(E7, T, 'personal', [d], { [d]: [p] });
+  r = H.apiSubmit(tok(T), dT);
+  ok(r.ok || /ล่วงหน้า|ไม่ว่าง/.test(r.error), 'ส่งคำขอได้โดยไม่ต้องเลือกผู้สอนแทนคาบนั้น', r.error);
+  c7 = H.ctx_();
+  if (r.ok) { const q = c7.requests.find(x => x.id === r.data.id); ok(c7.E.rst(q) === 'review' && c7.E.coverItems(q).length === 0, 'คำขอนั้นไปรอเห็นชอบทันที'); H.apiCancel(tok(T), r.data.id, 't'); }
+  // 7) ยกเลิก → กลับมาต้องสอน + แจ้งการจัดซ้อน (T มีสอนห้องนั้น แต่ถูกจัดสอนแทน U แล้ว)
+  r = H.apiCancelClassAway(tok(T), awId);
+  ok(!r.ok, 'ครูทั่วไปยกเลิกไม่ได้');
+  r = H.apiCancelClassAway(bossTok, awId);
+  ok(r.ok && r.data.conflicts.some(x => x.indexOf(TT.teachers[T].n) >= 0), 'ยกเลิกแล้ว แจ้งครูที่ถูกจัดซ้อน', JSON.stringify(r.data || r.error));
+  ok(H.readRows_('away')[0].status === 'cancelled', 'สถานะในชีตเป็น cancelled (เก็บประวัติ)');
+  if (idU) H.apiCancel(tok(U), idU, 't');
+}
+
 /* ---------------------------------------------------------------- 8. ชีต Users รูปแบบ e-Score จริง */
 console.log('8) e-Score จริง: PBKDF2, รหัสครู/อีเมล, บทบาทอัตโนมัติ');
 const K = boot();

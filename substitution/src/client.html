@@ -246,7 +246,7 @@ const isAcad = () => ME && ME.roles.includes('acad');
 const isPriv = () => ME && (ME.roles.includes('acad') || ME.roles.includes('admin'));
 const isDept = () => ME && ME.roles.includes('dept');
 
-function setState(st){ if (!st) return; REQ = st.requests; VER = st.version; if (st.today) TODAY = st.today; E = SubEngine.create(D, REQ, SET, TODAY); }
+function setState(st){ if (!st) return; REQ = st.requests; VER = st.version; if (st.today) TODAY = st.today; if (st.classAway && SET) SET.classAway = st.classAway; E = SubEngine.create(D, REQ, SET, TODAY); }
 function busyBar(on){ let b=$('.busy'); if (on && !b){ b=document.createElement('div'); b.className='busy'; document.body.appendChild(b); } if (!on && b) b.remove(); }
 let pending = 0;
 function call(fn, ...args){
@@ -288,7 +288,7 @@ function canArrange(r){ if (!ME) return false; if (isPriv()) return true;
   return r.type==='sick' && headGroups().includes(gOf(r.teacher)); }
 function myPending(){ if (!ME || ME.ti==null) return [];
   const out=[]; for (const r of REQ){ if (r.status==='cancelled') continue;
-    for (const it of r.items) if (it.ack==='pending' && E.ackWho(it)===ME.ti) out.push({r,it}); } return out; }
+    for (const it of r.items) if (it.ack==='pending' && E.ackWho(it)===ME.ti && !E.itemAway(it)) out.push({r,it}); } return out; }
 function myFix(){ return REQ.filter(r => (ME.ti!=null && (r.teacher===ME.ti || r.arrangedBy===ME.ti)) && ['fix','returned'].includes(E.rst(r))); }
 function notifications(){
   const n=[], mp=myPending();
@@ -308,6 +308,7 @@ const ICON = {
   cal:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
   chart:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   log:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  bus:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="14" rx="2"/><path d="M4 11h16M8 21v-4M16 21v-4M8 14h.01M16 14h.01"/></svg>',
   gear:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
   bell:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>',
   print:'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>',
@@ -318,7 +319,7 @@ function tabsFor(){
   if (ME.ti!=null) t.push(['inbox','รอฉันรับทราบ','inbox', myPending().length]);
   t.push(['list','รายการจัดสอนแทน','list']);
   if (isAcad()) t.push(['approve','เห็นชอบ','check', REQ.filter(r=>E.rst(r)==='review').length]);
-  t.push(['board','ตารางสอนแทนรายวัน','cal'],['stats','สถิติ','chart']);
+  t.push(['board','ตารางสอนแทนรายวัน','cal'],['away','ห้องไปราชการ','bus'],['stats','สถิติ','chart']);
   if (isPriv()) t.push(['log','บันทึกระบบ','log'],['settings','ตั้งค่า','gear']);
   return t;
 }
@@ -332,7 +333,7 @@ function roleText(){ const r=[];
 function render(){
   if (!TOKEN || !ME) return renderLogin();
   const n = notifications();
-  const views = {home:vHome, new:vNew, inbox:vInbox, list:vList, approve:vApprove, board:vBoard, stats:vStats, log:vLog, settings:vSettings};
+  const views = {home:vHome, new:vNew, inbox:vInbox, list:vList, approve:vApprove, board:vBoard, away:vAway, stats:vStats, log:vLog, settings:vSettings};
   if (!views[VIEW] || !tabsFor().some(t=>t[0]===VIEW)) VIEW='home';
   $('#app').innerHTML = `
   <header class="top"><div class="top-in">
@@ -383,6 +384,7 @@ function myDayStrip(ti, d){
     let cls='slot', body='<span class="muted">ว่าง</span>';
     if (L && e){ cls+=' off'; body=`<span class="muted">${esc(e.code)} ${esc(e.cls)}</span><br><span class="tiny">${TYPES[L.type].label}</span>`; }
     else if (o){ cls+=' subst'; body=`<b style="color:var(--warn)">${o.t}</b>${esc(o.cls)}<br><span class="tiny">แทน ${esc(sn(o.r.teacher))}</span>`; }
+    else if (e && !fr && E.classAwayAt(e.cls,d,p)){ cls+=' off'; body=`<span class="muted">${esc(e.code)} ${esc(e.cls)}</span><br><span class="tiny">นักเรียนไม่อยู่</span>`; }
     else if (e && !fr){ cls+= E.NT[e.code]?' nt':' teach'; body=`${esc(e.code)}<br><span class="tiny">${esc(e.cls)}</span>`; }
     else if (fr){ cls+=' off'; body='<span class="tiny">สลับออกแล้ว</span>'; }
     h+=`<div class="${cls}"><b>คาบ ${p} · ${perT(p).split('-')[0]}</b>${body}</div>`; }
@@ -491,6 +493,7 @@ function vNew(){
     <span class="sp"></span>${ci.length?`<button class="btn sm" data-act="autofill" title="เลือกครูอันดับ 1 ให้ทุกคาบที่ยังไม่ได้จัด">เติมอัตโนมัติ (อันดับ 1)</button>`:''}</div>
     <div class="card-b">
       ${ownConf.length?`<div class="note warn" style="margin-bottom:10px"><b>ข้อควรระวัง:</b> ${esc(tn(r.teacher))} มีภาระสอนแทน/สลับคาบที่รับไว้ในช่วงที่ลา ${ownConf.length} คาบ (${ownConf.map(x=>`${fmtD(x.date)} คาบ ${x.p} ${esc(x.it.cls)} ของ ${esc(sn(x.r.teacher))}`).join(', ')}) — ควรแจ้งเจ้าของคำขอให้จัดใหม่</div>`:''}
+      ${E.awayItems(r).length?`<div class="note ok" style="margin-bottom:10px">ไม่ต้องจัด — นักเรียนไม่อยู่ (ไปราชการ): ${E.awayItems(r).map(i=>`${fmtD(i.date)} คาบ ${i.p} ${esc(i.cls)} (${esc(E.itemAway(i).reason)})`).join(' · ')}</div>`:''}
       ${r.items.filter(i=>E.NT[i.code]).length?`<div class="small muted" style="margin-bottom:10px">ไม่ต้องจัดสอนแทน (โฮมรูม/ประชุม/PLC): ${r.items.filter(i=>E.NT[i.code]).map(i=>`${fmtD(i.date)} คาบ ${i.p} ${esc(i.subj)}`).join(' · ')}</div>`:''}
       ${ci.length?ci.map(it=>itemEditor(r,it)).join(''):'<div class="empty">ไม่มีคาบที่ต้องจัดสอนแทนในช่วงที่เลือก — ส่งเพื่อบันทึกการลาได้เลย</div>'}
     </div>
@@ -543,7 +546,7 @@ function itemEditor(r, it){
       ${c.avail.length?`<div class="cand-h"><span>#</span><span>ครู</span><span>คาบวันนั้น</span><span class="hm">สอนแทนสะสม</span><span class="hm"></span></div>`:''}
       ${c.avail.slice(0,lim).map((a,i)=>`${i===firstOther&&i>0?`<div class="tiny muted" style="padding:6px 10px;border-top:1px dashed var(--line)">ครูต่างกลุ่มสาระ</div>`:''}
       <div class="cand ${it.method==='sub'&&it.sub===a.ti&&it.ack!=='declined'?'sel':''}" data-act="pick" data-iid="${it.id}" data-ti="${a.ti}">
-        <span class="rk">${i+1}</span><span class="nm">${esc(tn(a.ti))} <small>${gtag(gOf(a.ti))} ${a.duty?`<span style="color:var(--warn)">⚠ ${esc(a.duty)}</span>`:''} ${a.meet?`<span class="chip s-ack">⚠ ติด ${esc(a.meet)}</span>`:''}</small></span>
+        <span class="rk">${i+1}</span><span class="nm">${esc(tn(a.ti))} <small>${gtag(gOf(a.ti))} ${a.duty?`<span style="color:var(--warn)">⚠ ${esc(a.duty)}</span>`:''} ${a.meet?`<span class="chip s-ack">⚠ ติด ${esc(a.meet)}</span>`:''} ${a.freedBy?`<span class="chip s-approved">ว่าง (${esc(a.freedBy)} ไม่อยู่)</span>`:''}</small></span>
         <span class="row" style="gap:6px">${loadBar(a.load)}<b class="num">${a.load.total}</b></span><span class="num hm">${a.cum}</span>
         <span class="hm">${a.same?'<span class="chip s-approved">กลุ่มเดียวกัน</span>':''}</span></div>`).join('')}
       ${!c.avail.length?`<div class="note warn">ไม่มีครูว่างจริงในคาบนี้ — ลองใช้ “สลับคาบกับครูอื่น” หรือ “สลับคาบว่าง”</div>`:''}
@@ -608,7 +611,7 @@ async function doSubmit(){
 function vInbox(){
   const pend = myPending(), upcoming = [];
   for (const r of REQ){ if (r.status==='cancelled') continue;
-    for (const it of r.items) if (it.ack==='ack' && E.ackWho(it)===ME.ti && it.date>=TODAY) upcoming.push({r,it}); }
+    for (const it of r.items) if (it.ack==='ack' && E.ackWho(it)===ME.ti && it.date>=TODAY && !E.itemAway(it)) upcoming.push({r,it}); }
   upcoming.sort((a,b)=>(a.it.date+a.it.p).localeCompare(b.it.date+b.it.p));
   const card = ({r,it},act) => `<div class="card" style="margin-bottom:10px"><div class="card-b">
     <div class="row"><span class="per">${fmtD(it.date)} · คาบ ${it.p}</span><span class="tiny muted">${perT(it.p)}</span><b>${esc(it.cls)}</b><span>${esc(it.code)} ${esc(it.subj)}</span>${tyChip(r.type)}</div>
@@ -651,7 +654,7 @@ function vApprove(){
 /* ================================================================ daily board */
 function boardRows(d){
   const rows=[]; for (const r of REQ){ if (r.status==='cancelled') continue;
-    for (const it of r.items){ if (E.NT[it.code]) continue;
+    for (const it of r.items){ if (E.NT[it.code] || E.itemAway(it)) continue;
       if (it.date===d) rows.push({r,it,p:it.p,kind:'out'});
       if ((it.method==='swapT'||it.method==='swapF') && it.ack!=='declined' && it.swap.date===d) rows.push({r,it,p:it.swap.p,kind:'in'}); } }
   return rows.sort((a,b)=>a.p-b.p || a.it.cls.localeCompare(b.it.cls,'th'));
@@ -683,9 +686,45 @@ function vBoard(){
     <div class="r"><button class="btn" data-act="bday" data-d="${step(-1)}">‹ ก่อนหน้า</button><input type="date" style="width:auto" data-act="bpick" value="${d}">
     <button class="btn" data-act="bday" data-d="${step(1)}">ถัดไป ›</button><button class="btn" data-act="bprint" data-d="${d}">${ICON.print} พิมพ์</button></div></div>
   ${!E.isSchool(d)?'<div class="note warn" style="margin-bottom:12px">วันนี้ไม่ใช่วันเรียน</div>':''}
+  ${awayBanner(d)}
   <div class="grid g3" style="margin-bottom:14px">${kpi(away.length,'ครูไม่อยู่')}${kpi(rows.length,'คาบที่มีการเปลี่ยนแปลง')}${kpi(pend,'คาบที่ยังไม่สมบูรณ์',pend?'var(--warn)':'var(--ok)')}</div>
   ${away.length?`<div class="card" style="margin-bottom:14px"><div class="card-b row">${away.map(r=>`<span class="chip ty-${r.type}" style="cursor:pointer" data-act="open" data-rid="${r.id}">${esc(sn(r.teacher))} · ${TYPES[r.type].label}${r.slots&&r.slots[d]?' คาบ '+r.slots[d].join(','):''}</span>`).join('')}</div></div>`:''}
   <div class="card">${boardTable(d)}</div>`;
+}
+
+/* ================================================================ ห้องเรียนไปราชการ */
+const awayList = () => (SET.classAway||[]).filter(a=>a.status!=='cancelled');
+const awPeriods = a => a.periods && a.periods.length ? 'คาบ '+a.periods.join(', ') : 'ทั้งวัน';
+function awayBanner(d){ const l = awayList().filter(a=>a.date===d); if (!l.length) return '';
+  return `<div class="note ok" style="margin-bottom:12px"><b>นักเรียนไม่อยู่:</b> ${l.map(a=>`${a.classes.map(esc).join(', ')} (${awPeriods(a)}) — ${esc(a.reason)}`).join(' · ')}<div class="tiny muted">ครูที่มีสอนห้องเหล่านี้ไม่ต้องจัดสอนแทน และรับคาบสอนแทนได้</div></div>`; }
+function awayTeachers(a){ // ครูที่คาบว่างลงเพราะห้องไม่อยู่
+  const w = wd(a.date), ps = a.periods && a.periods.length ? a.periods : [1,2,3,4,5,6,7,8,9], out = [];
+  D.teachers.forEach((t,ti)=>{ const hit = ps.filter(p=>{ const e=E.TAT[ti][w][p]; return e && a.classes.includes(e.cls); });
+    if (hit.length) out.push(`${sn(ti)} (คาบ ${hit.join(',')})`); });
+  return out;
+}
+function vAway(){
+  const all = (SET.classAway||[]).slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  const lv = {}; D.classes.forEach(c=>{ const k=(c.match(/^ม\.\d/)||['อื่น ๆ'])[0]; (lv[k] ||= []).push(c); });
+  UI.aw ||= {date:'', classes:[], periods:[], reason:''};
+  const f = UI.aw;
+  return `<div class="page-h"><div><div class="muted small">นักเรียนไปราชการ / ทัศนศึกษา / แข่งขัน ทั้งห้อง</div><h2>ห้องเรียนไปราชการ</h2></div></div>
+  <div class="note" style="margin-bottom:14px">ห้องที่กำหนดที่นี่ = <b>นักเรียนไม่อยู่</b>ในวัน/คาบนั้น · ครูที่มีสอนห้องนั้น <b>ไม่ต้องจัดสอนแทน</b> (ถ้าลา) และ <b>รับคาบสอนแทนได้</b> (ถ้าอยู่ปฏิบัติหน้าที่) · การจัดสอนแทนที่ทำไว้แล้วในคาบนั้นจะเปลี่ยนเป็น “ไม่ต้องสอน” อัตโนมัติ</div>
+  ${isPriv()?`<div class="card" style="margin-bottom:14px"><div class="card-h"><h3>เพิ่มรายการ</h3><span class="small muted">เฉพาะผู้ดูแลระบบ/หัวหน้ากลุ่มบริหารงานวิชาการ</span></div><div class="card-b">
+    <div class="grid g2"><div class="field"><label class="f">วันที่</label><input type="date" data-aw="date" value="${f.date}" min="${SET.termStart}" max="${SET.termEnd}"></div>
+      <div class="field"><label class="f">รายการ/เหตุผล</label><input type="text" data-aw="reason" value="${esc(f.reason)}" placeholder="เช่น นำนักเรียนแข่งขันทักษะวิชาการ ณ ..."></div></div>
+    <label class="f">ห้องเรียน (${f.classes.length} ห้อง)</label>
+    ${Object.entries(lv).map(([k,cs])=>`<div class="row" style="margin-bottom:6px"><button class="btn sm" data-act="awlv" data-lv="${esc(k)}">${esc(k)} ทั้งระดับ</button>${cs.map(c=>`<button class="pbtn ${f.classes.includes(c)?'on':''}" data-act="awcls" data-c="${esc(c)}" style="min-width:56px">${esc(c)}</button>`).join('')}</div>`).join('')}
+    <label class="f" style="margin-top:8px">ช่วงเวลา</label>
+    <div class="row"><button class="pbtn ${f.periods.length?'':'on'}" data-act="awall">ทั้งวัน</button>${[1,2,3,4,5,6,7,8,9].map(p=>`<button class="pbtn ${f.periods.includes(p)?'on':''}" data-act="awp" data-p="${p}">คาบ ${p}<small>${perT(p).split('-')[0]}</small></button>`).join('')}</div>
+    ${f.date && f.classes.length?`<div class="note warn" style="margin-top:10px">${(()=>{ const t=awayTeachers({date:f.date,classes:f.classes,periods:f.periods}); return t.length?`ครูที่คาบนี้จะว่างลง ${t.length} คน: ${t.map(esc).join(', ')}`:'ไม่มีครูสอนห้องเหล่านี้ในช่วงที่เลือก'; })()}</div>`:''}
+    <div class="row" style="margin-top:12px"><span class="sp"></span><button class="btn gold" data-act="awsave" ${f.date&&f.classes.length&&f.reason.trim()?'':'disabled'}>บันทึก</button></div>
+  </div></div>`:''}
+  <div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>เลขที่</th><th>วันที่</th><th>ห้องเรียน</th><th>ช่วงเวลา</th><th>รายการ</th><th>ผู้บันทึก</th><th></th></tr></thead><tbody>
+  ${all.length?all.map(a=>`<tr style="${a.status==='cancelled'?'opacity:.5':''}"><td class="nowrap"><b>${esc(a.id)}</b></td><td class="nowrap">${fmtD(a.date)}</td><td>${a.classes.map(esc).join(', ')}</td><td class="nowrap">${awPeriods(a)}</td>
+    <td>${esc(a.reason)}<div class="tiny muted">ครูที่คาบว่างลง: ${awayTeachers(a).map(esc).join(', ')||'-'}</div></td><td class="small">${esc(a.createdBy)}<div class="tiny muted">${fmtDT(a.createdAt)}</div></td>
+    <td>${a.status==='cancelled'?'<span class="chip s-cancelled">ยกเลิก</span>':isPriv()&&a.date>=TODAY?`<button class="btn sm bad" data-act="awcancel" data-id="${esc(a.id)}">ยกเลิก</button>`:''}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">ยังไม่มีรายการ</td></tr>'}
+  </tbody></table></div></div>`;
 }
 
 /* ================================================================ statistics */
@@ -872,6 +911,7 @@ function renderDetail(){
       <div><span class="muted small">เหตุผล</span><div>${esc(r.reason||'-')}${r.file?` · <a href="${esc(r.file.url)}" target="_blank">📎 ${esc(r.file.name)}</a>`:''}</div></div>
     </div>
     ${st==='returned'&&r.returnNote?`<div class="note bad" style="margin-bottom:10px">ส่งกลับ: ${esc(r.returnNote)}</div>`:''}
+    ${E.awayItems(r).length?`<div class="note ok" style="margin-bottom:10px">ไม่ต้องสอน — นักเรียนไม่อยู่: ${E.awayItems(r).map(i=>`${fmtD(i.date)} คาบ ${i.p} ${esc(i.cls)}${E.ackWho(i)!=null?` (เดิมจัด ${esc(sn(E.ackWho(i)))})`:''} · ${esc(E.itemAway(i).id)} ${esc(E.itemAway(i).reason)}`).join('<br>')}</div>`:''}
     <div class="tbl-wrap"><table class="t"><thead><tr><th>วัน/คาบ</th><th>ห้อง/วิชา</th><th>วิธีจัด</th><th>ผู้รับผิดชอบ</th><th>รับทราบ</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="muted">ไม่มีคาบที่ต้องจัด</td></tr>'}</tbody></table></div>
     <h4 style="margin:16px 0 8px">ประวัติการดำเนินการ</h4>
     <ul class="tl">${(r.history||[]).map(h=>`<li><b>${esc(h.act)}</b> — ${esc(h.by)} <span class="muted tiny">${fmtDT(h.at)}</span>${h.note?`<div class="small muted">${esc(h.note)}</div>`:''}</li>`).join('')}</ul>
@@ -992,6 +1032,17 @@ document.addEventListener('click', async e => {
     case 'person': personModal(+el.dataset.ti); break;
     case 'csv': exportCSV(); break;
     case 'logreload': UI.log=null; render(); break;
+    case 'awcls': { const c=el.dataset.c, a=UI.aw.classes, i=a.indexOf(c); if (i>=0) a.splice(i,1); else a.push(c); render(); break; }
+    case 'awlv': { const cs=D.classes.filter(c=>c.startsWith(el.dataset.lv)), a=UI.aw.classes, allOn=cs.every(c=>a.includes(c));
+      UI.aw.classes = allOn ? a.filter(c=>!cs.includes(c)) : [...new Set(a.concat(cs))]; render(); break; }
+    case 'awall': UI.aw.periods=[]; render(); break;
+    case 'awp': { const p=+el.dataset.p, a=UI.aw.periods, i=a.indexOf(p); if (i>=0) a.splice(i,1); else a.push(p); a.sort((x,y)=>x-y); render(); break; }
+    case 'awsave': { const r = await act('apiSaveClassAway', [UI.aw], 'บันทึกแล้ว');
+      if (r){ if (r.data.moot.length) alertModal('การจัดสอนแทนที่ไม่ต้องสอนแล้ว', 'นักเรียนไม่อยู่ในคาบต่อไปนี้ — ระบบเปลี่ยนเป็น “ไม่ต้องสอน” และคืนเวลาว่างให้ผู้สอนแทน:\n' + r.data.moot.join('\n'));
+        UI.aw={date:'',classes:[],periods:[],reason:''}; render(); } break; }
+    case 'awcancel': confirmModal('ยกเลิกห้องเรียนไปราชการ', 'คาบของห้องเหล่านี้จะกลับมาต้องสอนตามปกติ', 'ยกเลิกรายการ', async ()=>{
+      const r = await act('apiCancelClassAway', [el.dataset.id], 'ยกเลิกแล้ว');
+      if (r && r.data.conflicts.length) alertModal('ตรวจการจัดซ้อน', 'หลังยกเลิก พบครูที่ถูกจัดซ้อน — โปรดจัดใหม่:\n' + r.data.conflicts.join('\n')); }); break;
     case 'savecfg': {
       const patch={}; document.querySelectorAll('[data-cfg]').forEach(x=>{ patch[x.dataset.cfg] = x.dataset.cfg==='HOLIDAYS' ? x.value.split(/\s+/).filter(Boolean).join(',') : x.value; });
       const heads={}; document.querySelectorAll('[data-head]').forEach(x=>{ if (x.value) heads[x.dataset.head]=x.value; }); patch.DEPT_HEADS=JSON.stringify(heads);
@@ -1033,9 +1084,12 @@ document.addEventListener('change', async e => {
       if (!up.ok){ alertModal('อัปโหลดไม่สำเร็จ', up.error); return; } r.file=up.file; render(); }
     return; }
   if (t.dataset.act==='bpick'){ UI.board=t.value; render(); return; }
+  if (t.dataset.aw){ UI.aw[t.dataset.aw]=t.value; if (t.dataset.aw==='date') render(); return; }
   if (t.dataset.s){ UI[t.dataset.s]=t.value; render(); return; }
   if (t.dataset.umap!=null){ const r = await call('apiSetUserMap', t.dataset.umap, t.value); if (!r.ok) alertModal('บันทึกไม่สำเร็จ', r.error); else toast('จับคู่แล้ว'); UI.admin=null; render(); }
 });
+document.addEventListener('input', e => { const t=e.target; if (t.dataset && t.dataset.aw==='reason'){ UI.aw.reason=t.value;
+  const b=$('[data-act="awsave"]'); if (b) b.disabled = !(UI.aw.date && UI.aw.classes.length && UI.aw.reason.trim()); } });
 document.addEventListener('keydown', e => { if (e.key==='Enter' && e.target.dataset && e.target.dataset.act==='logq'){ UI.logQ=e.target.value; UI.log=null; render(); } });
 
 /* ---------- boot ---------- */

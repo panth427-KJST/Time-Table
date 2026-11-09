@@ -7,7 +7,7 @@
    ===================================================================== */
 var TZ = 'Asia/Bangkok';
 var SH = { settings: 'Settings', teachers: 'Teachers', tt: 'Timetable', cls: 'ClassTimetable', duty: 'Duty',
-  req: 'Requests', items: 'Items', log: 'Log', umap: 'UserMap' };
+  req: 'Requests', items: 'Items', log: 'Log', umap: 'UserMap', away: 'ClassAway' };
 var HEAD = {
   settings: ['key', 'value', 'note'],
   teachers: ['teacher', 'dept'],
@@ -20,7 +20,8 @@ var HEAD = {
     'sub_teacher', 'swap_teacher', 'swap_date', 'swap_period', 'swap_code', 'swap_subject', 'ack', 'ack_at',
     'decline_note', 'decline_at', 'declined_by', 'request_type', 'request_status'],
   log: ['at', 'username', 'name', 'action', 'request_id', 'detail'],
-  umap: ['escore_username', 'teacher', 'note']
+  umap: ['escore_username', 'teacher', 'note'],
+  away: ['id', 'date', 'classes', 'periods', 'reason', 'status', 'created_by', 'created_at', 'cancelled_by', 'cancelled_at']
 };
 var DEFAULTS = [
   ['SCHOOL_NAME', 'โรงเรียนกาญจนาภิเษกวิทยาลัย สุราษฎร์ธานี', 'ชื่อโรงเรียน'],
@@ -116,7 +117,21 @@ function list_(s) { return String(s || '').split(/[,\s]+/).map(function (x) { re
 function json_(s, dflt) { try { return s ? JSON.parse(s) : dflt; } catch (e) { return dflt; } }
 function engineSettings_(S) {
   return { termStart: S.TERM_START, termEnd: S.TERM_END, maxAhead: Math.max(0, parseInt(S.MAX_AHEAD, 10) || 30),
-    leadDays: Math.max(0, parseInt(S.LEAD_DAYS, 10) || 0), holidays: list_(S.HOLIDAYS) };
+    leadDays: Math.max(0, parseInt(S.LEAD_DAYS, 10) || 0), holidays: list_(S.HOLIDAYS), classAway: classAway_(S) };
+}
+/* ห้องเรียนไม่อยู่ (นักเรียนไปราชการ) — ชีต ClassAway (อ่านครั้งเดียวต่อคำขอ) */
+function classAway_(S) {
+  if (!S.__away) S.__away = readRows_('away').map(function (r) {
+    return { id: r.id, date: r.date, classes: list_(r.classes), periods: list_(r.periods).map(Number).filter(function (p) { return p >= 1 && p <= 9; }),
+      reason: r.reason, status: r.status || 'active', createdBy: r.created_by, createdAt: r.created_at, cancelledBy: r.cancelled_by, cancelledAt: r.cancelled_at };
+  });
+  return S.__away;
+}
+function saveClassAway_(list) {
+  writeRows_('away', list.map(function (a) {
+    return { id: a.id, date: a.date, classes: a.classes.join(','), periods: (a.periods || []).join(','), reason: a.reason || '', status: a.status,
+      created_by: a.createdBy || '', created_at: a.createdAt || '', cancelled_by: a.cancelledBy || '', cancelled_at: a.cancelledAt || '' };
+  }));
 }
 
 /* ---------------------------------------------------------------- timetable */
@@ -436,7 +451,7 @@ function pubSettings_(S, D) {
   es.deptHeads = dh; es.school = S.SCHOOL_NAME; es.termName = S.TERM_NAME; es.notify = S.NOTIFY_EMAIL === 'on';
   return es;
 }
-function state_(c) { return { requests: c.requests, version: version_(), today: c.today }; }
+function state_(c) { return { requests: c.requests, version: version_(), today: c.today, classAway: classAway_(c.S) }; }
 
 /* อ่านอย่างเดียว */
 function read_(token, fn) {
@@ -675,6 +690,51 @@ function apiCancel(token, rid, note) {
     hist_(r, me, 'ยกเลิกคำขอ', note || ''); log_(me, 'ยกเลิก', r.id, note || '');
     queueMail_(c, Object.keys(who).map(Number), 'ยกเลิกการจัดสอนแทน ' + r.id, 'คาบที่ท่านถูกจัดในคำขอนี้ถูกยกเลิกแล้ว');
     return { ok: 1 };
+  });
+}
+/* ---------------------------------------------------------------- ห้องเรียนไปราชการ (แอดมิน) */
+function apiSaveClassAway(token, rec) {
+  return mutate_(token, function (me, c) {
+    if (!isPriv_(me)) return { error: 'เฉพาะผู้ดูแลระบบ/หัวหน้ากลุ่มบริหารงานวิชาการ' };
+    rec = rec || {};
+    var date = String(rec.date || ''), classes = (rec.classes || []).map(String).filter(function (x) { return c.D.classes.indexOf(x) >= 0; });
+    var periods = (rec.periods || []).map(Number).filter(function (p) { return p >= 1 && p <= 9; }).sort(function (a, b) { return a - b; });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !c.E.isSchool(date)) return { error: 'วันที่ต้องเป็นวันเรียนในภาคเรียนนี้' };
+    if (!classes.length) return { error: 'เลือกห้องเรียนอย่างน้อย 1 ห้อง' };
+    var reason = String(rec.reason || '').trim().slice(0, 300);
+    if (!reason) return { error: 'กรุณาระบุรายการ/เหตุผล เช่น นำนักเรียนไปแข่งขันทักษะวิชาการ' };
+    var list = classAway_(c.S);
+    var p = PropertiesService.getScriptProperties(), n = +(p.getProperty('AWAY_SEQ') || 0) + 1; p.setProperty('AWAY_SEQ', String(n));
+    var a = { id: 'CA-' + ('000' + n).slice(-4), date: date, classes: classes, periods: periods, reason: reason, status: 'active', createdBy: me.name, createdAt: now_() };
+    list.push(a); saveClassAway_(list);
+    c.E = SubEngine.create(c.D, c.requests, engineSettings_(c.S), c.today);     // คำนวณสถานะใหม่ (คาบที่จัดไว้แล้วกลายเป็นไม่ต้องสอน)
+    var moot = [];
+    c.requests.forEach(function (r) { if (r.status !== 'cancelled') r.items.forEach(function (it) {
+      if (c.E.itemAway(it) === a && !c.E.NT[it.code] && it.method && it.method !== 'none') { moot.push(r.id + ' ' + itemText_(it)); hist_(r, me, 'นักเรียนไม่อยู่ — คาบนี้ไม่ต้องสอน', itemText_(it) + ' (' + a.id + ')'); }
+    }); });
+    log_(me, 'ห้องเรียนไปราชการ', a.id, date + ' · ' + classes.join(', ') + (periods.length ? ' · คาบ ' + periods.join(',') : ' · ทั้งวัน') + ' · ' + reason);
+    return { id: a.id, moot: moot };
+  });
+}
+function apiCancelClassAway(token, id) {
+  return mutate_(token, function (me, c) {
+    if (!isPriv_(me)) return { error: 'เฉพาะผู้ดูแลระบบ/หัวหน้ากลุ่มบริหารงานวิชาการ' };
+    var list = classAway_(c.S), a = list.filter(function (x) { return x.id === id; })[0];
+    if (!a || a.status === 'cancelled') return { error: 'ไม่พบรายการ หรือยกเลิกไปแล้ว' };
+    a.status = 'cancelled'; a.cancelledBy = me.name; a.cancelledAt = now_();
+    saveClassAway_(list);
+    c.E = SubEngine.create(c.D, c.requests, engineSettings_(c.S), c.today);
+    log_(me, 'ยกเลิกห้องเรียนไปราชการ', a.id, a.date + ' · ' + a.classes.join(', '));
+    // ตรวจครูที่ถูกจัดซ้อน หลังคาบของห้องเหล่านี้กลับมาต้องสอน
+    var E = c.E, seen = {}, conflicts = [];
+    c.requests.forEach(function (r) { if (r.status === 'cancelled') return; r.items.forEach(function (it) {
+      var w = E.ackWho(it); if (w == null || it.ack === 'declined' || E.itemAway(it) || it.date !== a.date) return;
+      var k = w + '|' + it.date + '|' + it.p, e = E.TAT[w] && E.TAT[w][SubEngine.wd(it.date)][it.p], nm = c.D.teachers[w].n;
+      if (seen[k]) conflicts.push(nm + ' ถูกจัด 2 รายการในคาบ ' + it.p + ' (' + seen[k] + ', ' + r.id + ')');
+      else if (e && !E.NT[e.code] && !E.classAwayAt(e.cls, it.date, it.p)) conflicts.push(nm + ' มีสอน ' + e.cls + ' คาบ ' + it.p + ' แต่ถูกจัดสอนแทนใน ' + r.id);
+      seen[k] = r.id;
+    }); });
+    return { ok: 1, conflicts: conflicts };
   });
 }
 function apiGetLog(token, q) {
