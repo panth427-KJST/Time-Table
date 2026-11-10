@@ -288,7 +288,29 @@ var SubEngine = (function () {
       var ps = a.periods && a.periods.length ? a.periods : [1, 2, 3, 4, 5, 6, 7, 8, 9];
       (a.classes || []).forEach(function (c) { ps.forEach(function (p) { AW[c + '|' + a.date + '|' + p] = a; }); });
     });
-    function classAwayAt(cls, d, p) { return AW[cls + '|' + d + '|' + p] || null; }
+    /* กลุ่มเรียนรวม (เช่น "เลือกตามความสนใจ ม.5 กลุ่ม 2", "กลุ่มเตรียม ม.5", "ม.ต้น") ว่างเมื่อ "ทุกห้องในระดับ"
+       ที่มีคาบกลุ่ม/วิชาเลือกในคาบนั้นไม่อยู่ — ห้องสมาชิก = ห้องในระดับนั้นที่ตารางเรียนเป็นคาบไม่มีครูประจำ (วิชาเลือก/กิจกรรม) */
+    var GAW = {};
+    function groupLevels(label) {
+      var s = String(label || '');
+      if (/ทั้งโรงเรียน/.test(s)) return ['1', '2', '3', '4', '5', '6'];
+      if (/ม\.\s*ต้น/.test(s)) return ['1', '2', '3'];
+      if (/ม\.\s*ปลาย/.test(s)) return ['4', '5', '6'];
+      var m = s.match(/ม\.\s*(\d)(?!\s*\/)/); return m ? [m[1]] : [];
+    }
+    function classAwayAt(cls, d, p) {
+      var k = cls + '|' + d + '|' + p;
+      if (AW[k] || CAT[cls]) return AW[k] || null;                  // ห้องเรียนปกติ
+      if (k in GAW) return GAW[k];
+      var lv = groupLevels(cls), w = wd(d), res = null;
+      if (lv.length && w >= 0) {
+        var rooms = Object.keys(CAT).filter(function (c) { var m = c.match(/^ม\.(\d)\//); return m && lv.indexOf(m[1]) >= 0; });
+        var members = rooms.filter(function (c) { var e = CAT[c][w][p]; return e && !e.tis.length && e.code !== 'พักกลางวัน'; });
+        if (!members.length) members = rooms;
+        if (members.length && members.every(function (c) { return AW[c + '|' + d + '|' + p]; })) res = AW[members[0] + '|' + d + '|' + p];
+      }
+      return (GAW[k] = res);
+    }
     function itemAway(it) { return classAwayAt(it.cls, it.date, it.p); }   // คาบนี้นักเรียนไม่อยู่ = ไม่ต้องสอน
 
     function isSchool(s) { return wd(s) >= 0 && st.holidays.indexOf(s) < 0 && s >= st.termStart && s <= st.termEnd; }
@@ -421,9 +443,11 @@ var SubEngine = (function () {
           var B = ce.tis[0];
           if (O.freed[K(B, d, p)] || leaveAt(O, B, d, p)) continue;
           if ((item.declinedBy || []).indexOf(B) >= 0) continue;
-          if (busy(B, item.date, item.p, O)) continue;
-          if (busy(req.teacher, d, p, O)) continue;
-          list.push({ t: B, date: d, p: p, code: ce.code, subj: ce.subj, same: gOf(B) === g });
+          var bB = busy(B, item.date, item.p, O), bA = busy(req.teacher, d, p, O);
+          if (bB && bB.kind !== 'meet') continue;                          // คาบประชุม = ครูตัดสินใจใช้เป็นคาบว่างได้ (มีคำเตือน)
+          if (bA && bA.kind !== 'meet') continue;
+          list.push({ t: B, date: d, p: p, code: ce.code, subj: ce.subj, same: gOf(B) === g,
+            meetB: bB ? bB.meet : null, meetA: bA ? bA.meet : null });
         }
       });
       list.sort(function (a, b) {
@@ -440,8 +464,9 @@ var SubEngine = (function () {
         for (var p = 1; p <= 9; p++) {
           if (CAT[item.cls][w][p] || p === lunch) continue;
           if (O.classIn[item.cls + '|' + d + '|' + p] || classAwayAt(item.cls, d, p)) continue;
-          if (busy(req.teacher, d, p, O)) continue;
-          list.push({ date: d, p: p });
+          var bA2 = busy(req.teacher, d, p, O);
+          if (bA2 && bA2.kind !== 'meet') continue;
+          list.push({ date: d, p: p, meet: bA2 ? bA2.meet : null });
         }
       });
       list.sort(function (a, b) { return Math.abs(diffDays(item.date, a.date)) - Math.abs(diffDays(item.date, b.date)) || a.p - b.p; });
@@ -1060,8 +1085,12 @@ function pickedText(it){
   return '<span style="color:var(--bad)">ยังไม่ได้จัด</span>';
 }
 /* คำเตือน: ผู้รับคาบ (สอนแทน/คู่สลับ) ติดประชุม/PLC ในคาบนั้น */
-function meetWarn(it){ const w = E.ackWho(it); if (w==null || it.ack==='declined') return ''; const m = E.meetingAt(w, it.date, it.p);
-  return m ? `<div class="tiny" style="color:var(--warn)">⚠ ${esc(sn(w))} ติด ${esc(m)} คาบนี้</div>` : ''; }
+function meetWarn(it, r){ if (it.ack==='declined') return ''; let h='';
+  const w = E.ackWho(it), m = w!=null && E.meetingAt(w, it.date, it.p);
+  if (m) h += `<div class="tiny" style="color:var(--warn)">⚠ ${esc(sn(w))} ติด ${esc(m)} คาบนี้</div>`;
+  if (r && it.swap && (it.method==='swapT'||it.method==='swapF')){ const m2 = E.meetingAt(r.teacher, it.swap.date, it.swap.p);
+    if (m2) h += `<div class="tiny" style="color:var(--warn)">⚠ ${esc(sn(r.teacher))} ใช้คาบ ${esc(m2)} (${fmtD(it.swap.date)} คาบ ${it.swap.p}) เป็นคาบสอน</div>`; }
+  return h; }
 function loadBar(l){ let h=''; for (let i=0;i<Math.max(6,l.total);i++) h+=`<i class="${i<l.base?'f':i<l.total?'s':''}"></i>`; return `<span class="load" title="สอนตามตาราง ${l.base} + สอนแทน ${l.extra}">${h}</span>`; }
 function itemEditor(r, it){
   const open = UI.open===it.id, co = E.coTeachers(r,it), act = !!E.ACT[it.code];
@@ -1094,12 +1123,12 @@ function itemEditor(r, it){
     const c = E.candSwapT(r,it); UI.cache[it.id+'T']=c;
     body += c.err ? `<div class="note warn">${c.err}</div>` : `<div class="small muted" style="margin-bottom:6px">ครูที่สอนห้อง <b>${esc(it.cls)}</b> และสลับกันได้ (ทั้งสองฝ่ายว่างจริง) — ครูอีกฝ่ายต้องกดรับทราบ</div>
       ${c.list.length?c.list.slice(0,UI.more[it.id+'T']?999:8).map((o,i)=>`<div class="opt ${it.method==='swapT'&&it.ack!=='declined'&&it.swap.t===o.t&&it.swap.date===o.date&&it.swap.p===o.p?'sel':''}" data-act="pickT" data-iid="${it.id}" data-k="${i}">
-        <span class="when">${fmtD(o.date)} คาบ ${o.p}</span><span><b>${esc(tn(o.t))}</b> ${gtag(gOf(o.t))}<br><span class="small muted">${esc(sn(o.t))} มาสอนคาบนี้ · ${esc(sn(r.teacher))} ไปสอน ${esc(o.code)} ${esc(it.cls)} แทนใน ${fmtD(o.date)} คาบ ${o.p}</span></span></div>`).join('')
+        <span class="when">${fmtD(o.date)} คาบ ${o.p}</span><span><b>${esc(tn(o.t))}</b> ${gtag(gOf(o.t))}<br><span class="small muted">${esc(sn(o.t))} มาสอนคาบนี้ · ${esc(sn(r.teacher))} ไปสอน ${esc(o.code)} ${esc(it.cls)} แทนใน ${fmtD(o.date)} คาบ ${o.p}</span>${o.meetB?`<br><span class="chip s-ack">⚠ ${esc(sn(o.t))} ติด ${esc(o.meetB)} คาบนี้</span>`:''}${o.meetA?`<br><span class="chip s-ack">⚠ ${esc(sn(r.teacher))} ใช้คาบ ${esc(o.meetA)} ของตนเอง</span>`:''}</span></div>`).join('')
         + (c.list.length>8?`<button class="btn sm" data-act="more" data-iid="${it.id}T">${UI.more[it.id+'T']?'แสดงน้อยลง':'แสดงทั้งหมด '+c.list.length+' ตัวเลือก'}</button>`:'') : '<div class="empty">ไม่พบคาบที่สลับได้ในช่วง 1 สัปดาห์ก่อน – 2 สัปดาห์หลัง</div>'}`;
   } else if (tab==='swapF'){
     const c = E.candSwapF(r,it); UI.cache[it.id+'F']=c;
-    body += c.err ? `<div class="note warn">${c.err}</div>` : `<div class="small muted" style="margin-bottom:6px">คาบที่ <b>ห้อง ${esc(it.cls)} ว่าง</b> และ <b>${esc(sn(r.teacher))} ว่าง</b> — ย้ายไปสอนคาบนั้นแทน (ไม่ต้องใช้ครูสอนแทน)</div>
-      <div class="row">${c.list.length?c.list.slice(0,UI.more[it.id+'F']?999:12).map((o,i)=>`<button class="btn sm ${it.method==='swapF'&&it.swap.date===o.date&&it.swap.p===o.p?'gold':''}" data-act="pickF" data-iid="${it.id}" data-k="${i}">${fmtD(o.date)} คาบ ${o.p}</button>`).join('')
+    body += c.err ? `<div class="note warn">${c.err}</div>` : `<div class="small muted" style="margin-bottom:6px">คาบที่ <b>ห้อง ${esc(it.cls)} ว่าง</b> และ <b>${esc(sn(r.teacher))} ว่าง</b> — ย้ายไปสอนคาบนั้นแทน (ไม่ต้องใช้ครูสอนแทน) · ปุ่มที่มี ⚠ คือคาบประชุม/PLC ของตนเอง เลือกได้ถ้าตัดสินใจไม่เข้าประชุม</div>
+      <div class="row">${c.list.length?c.list.slice(0,UI.more[it.id+'F']?999:12).map((o,i)=>`<button class="btn sm ${it.method==='swapF'&&it.swap.date===o.date&&it.swap.p===o.p?'gold':''}" data-act="pickF" data-iid="${it.id}" data-k="${i}" ${o.meet?`title="คาบ ${esc(o.meet)} ของตนเอง" style="border-color:var(--warn)"`:''}>${fmtD(o.date)} คาบ ${o.p}${o.meet?`<span style="color:var(--warn)"> ⚠ ${esc(o.meet)}</span>`:''}</button>`).join('')
         + (c.list.length>12?`<button class="btn sm" data-act="more" data-iid="${it.id}F">${UI.more[it.id+'F']?'น้อยลง':'ทั้งหมด '+c.list.length}</button>`:'') : '<div class="empty">ไม่พบคาบว่างที่ตรงกัน</div>'}</div>`;
   } else if (tab==='none'){
     body += `<div class="note">${act?`คาบนี้เป็นกิจกรรม <b>${esc(it.subj)}</b> ที่ครูทุกคนติดกิจกรรมพร้อมกัน — ฝากครูร่วมกิจกรรม/หัวหน้ากิจกรรมดูแลนักเรียน`:`คาบนี้มีครูร่วมสอน: <b>${co.map(sn).map(esc).join(', ')}</b> ซึ่งไม่ได้ลา — ให้ครูร่วมสอนดูแลแทนได้`}</div>
@@ -1123,13 +1152,13 @@ function draftPayload(){
 }
 function confirmSubmit(){
   const r=W.req, ci=E.coverItems(r);
-  const rows = ci.map(it=>`<tr><td class="nowrap">${fmtD(it.date)} คาบ ${it.p}</td><td>${esc(it.cls)} · ${esc(it.code)}</td><td>${METHODS[it.method].label}</td><td>${pickedText(it)}${meetWarn(it)}</td></tr>`).join('');
-  const nMeet = ci.filter(it=>meetWarn(it)).length;
+  const rows = ci.map(it=>`<tr><td class="nowrap">${fmtD(it.date)} คาบ ${it.p}</td><td>${esc(it.cls)} · ${esc(it.code)}</td><td>${METHODS[it.method].label}</td><td>${pickedText(it)}${meetWarn(it,r)}</td></tr>`).join('');
+  const nMeet = ci.filter(it=>meetWarn(it,r)).length;
   const nAck = new Set(ci.map(E.ackWho).filter(x=>x!=null)).size;
   modal(`<div class="modal"><div class="modal-h"><h3>ตรวจสอบก่อนส่ง</h3><button class="x" data-act="close">×</button></div><div class="modal-b">
     <div class="row" style="margin-bottom:10px">${tyChip(r.type)}<b>${esc(tn(r.teacher))}</b><span class="muted">${r.dates.map(d=>fmtD(d)+(r.slots&&r.slots[d]?` (คาบ ${r.slots[d].join(', ')})`:'')).join(', ')}</span></div>
     ${ci.length?`<div class="tbl-wrap"><table class="t"><thead><tr><th>วัน/คาบ</th><th>ห้อง/วิชา</th><th>วิธีจัด</th><th>ผู้รับผิดชอบ</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<div class="muted">ไม่มีคาบที่ต้องจัดสอนแทน</div>'}
-    ${nMeet?`<div class="note warn" style="margin-top:12px">มี <b>${nMeet} คาบ</b> ที่ผู้สอนแทนติดประชุม/PLC ในคาบเดียวกัน — ผู้สอนแทนจะต้องขาดประชุม ควรแจ้งประธานการประชุมด้วย</div>`:''}
+    ${nMeet?`<div class="note warn" style="margin-top:12px">มี <b>${nMeet} คาบ</b> ที่ใช้เวลาตรงกับประชุม/PLC (ตามรายการ ⚠ ด้านบน) — ครูที่เกี่ยวข้องจะต้องขาดประชุมนั้น ควรแจ้งประธานการประชุมด้วย</div>`:''}
     <div class="note" style="margin-top:12px">เมื่อส่งแล้ว ระบบแจ้งครูที่ถูกจัด <b>${nAck} คน</b> ให้กดรับทราบ → เมื่อรับทราบครบ ส่งให้หัวหน้ากลุ่มบริหารงานวิชาการเห็นชอบ → <b>สมบูรณ์</b></div>
   </div><div class="modal-f"><button class="btn" data-act="close">กลับไปแก้ไข</button><button class="btn gold" data-act="wsend">ยืนยันส่ง</button></div></div>`);
 }
@@ -1235,9 +1264,14 @@ const awayList = () => (SET.classAway||[]).filter(a=>a.status!=='cancelled');
 const awPeriods = a => a.periods && a.periods.length ? 'คาบ '+a.periods.join(', ') : 'ทั้งวัน';
 function awayBanner(d){ const l = awayList().filter(a=>a.date===d); if (!l.length) return '';
   return `<div class="note ok" style="margin-bottom:12px"><b>นักเรียนไม่อยู่:</b> ${l.map(a=>`${a.classes.map(esc).join(', ')} (${awPeriods(a)}) — ${esc(a.reason)}`).join(' · ')}<div class="tiny muted">ครูที่มีสอนห้องเหล่านี้ไม่ต้องจัดสอนแทน และรับคาบสอนแทนได้</div></div>`; }
-function awayTeachers(a){ // ครูที่คาบว่างลงเพราะห้องไม่อยู่
-  const w = wd(a.date), ps = a.periods && a.periods.length ? a.periods : [1,2,3,4,5,6,7,8,9], out = [];
-  D.teachers.forEach((t,ti)=>{ const hit = ps.filter(p=>{ const e=E.TAT[ti][w][p]; return e && a.classes.includes(e.cls); });
+function awayTeachers(a){ // ครูที่คาบว่างลงเพราะรายการนี้ (รวมคาบกลุ่มเรียนรวมเมื่อไปทั้งระดับ)
+  const others = (SET.classAway||[]).filter(x=>x.id!==a.id && x.status!=='cancelled');
+  const E0 = SubEngine.create(D, REQ, Object.assign({}, SET, {classAway: others}), TODAY);
+  const E1 = SubEngine.create(D, REQ, Object.assign({}, SET, {classAway: others.concat([Object.assign({}, a, {status:'active'})])}), TODAY);
+  const w = wd(a.date), out = [];
+  if (w < 0) return out;
+  D.teachers.forEach((t,ti)=>{ const hit=[]; for (let p=1;p<=9;p++){ const e=E1.TAT[ti][w][p];
+      if (e && !E1.NT[e.code] && E1.classAwayAt(e.cls,a.date,p) && !E0.classAwayAt(e.cls,a.date,p)) hit.push(p); }
     if (hit.length) out.push(`${sn(ti)} (คาบ ${hit.join(',')})`); });
   return out;
 }
@@ -1425,7 +1459,7 @@ function renderDetail(){
   const s2 = st==='fix'?'err': need.length===ok?'done':'cur', s3 = st==='approved'?'done':st==='returned'?'err':st==='review'?'cur':'', s4 = st==='approved'?'done':'';
   const rows = ci.map(it=>{ const w=E.ackWho(it), mine = it.ack==='pending' && w===ME.ti && r.status!=='cancelled';
     return `<tr><td class="nowrap"><b>${fmtD(it.date)}</b> คาบ ${it.p}<div class="tiny muted">${perT(it.p)}</div></td><td><b>${esc(it.cls)}</b><div class="small">${esc(it.code)} ${esc(it.subj)}</div></td>
-      <td>${METHODS[it.method]?.label||'-'}</td><td class="small">${pickedText(it)}${meetWarn(it)}${it.ack==='declined'&&it.sub!=null?`<div class="tiny muted">(เดิม ${esc(sn(it.sub))})</div>`:''}${it.ack==='declined'&&it.method==='swapT'?`<div class="tiny muted">(เดิม ${esc(sn(it.swap.t))})</div>`:''}</td>
+      <td>${METHODS[it.method]?.label||'-'}</td><td class="small">${pickedText(it)}${meetWarn(it,r)}${it.ack==='declined'&&it.sub!=null?`<div class="tiny muted">(เดิม ${esc(sn(it.sub))})</div>`:''}${it.ack==='declined'&&it.method==='swapT'?`<div class="tiny muted">(เดิม ${esc(sn(it.swap.t))})</div>`:''}</td>
       <td>${E.ackNeeded(it)?ackChip(it.ack):ackChip(null)}${it.ackAt?`<div class="tiny muted">${fmtDT(it.ackAt)}</div>`:''}${it.declNote?`<div class="tiny" style="color:var(--bad)">“${esc(it.declNote)}”</div>`:''}</td>
       <td class="nowrap">${mine?`<button class="btn sm ok" data-act="ack" data-rid="${r.id}" data-iid="${it.id}">รับทราบ</button> <button class="btn sm bad" data-act="decline" data-rid="${r.id}" data-iid="${it.id}">ขอเปลี่ยน</button>`:''}
         ${owner && it.ack==='declined' && r.status==='open'?`<button class="btn sm gold" data-act="fixitem" data-rid="${r.id}" data-iid="${it.id}">จัดใหม่</button>`:''}</td></tr>`; }).join('');

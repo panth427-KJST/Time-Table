@@ -81,7 +81,29 @@ var SubEngine = (function () {
       var ps = a.periods && a.periods.length ? a.periods : [1, 2, 3, 4, 5, 6, 7, 8, 9];
       (a.classes || []).forEach(function (c) { ps.forEach(function (p) { AW[c + '|' + a.date + '|' + p] = a; }); });
     });
-    function classAwayAt(cls, d, p) { return AW[cls + '|' + d + '|' + p] || null; }
+    /* กลุ่มเรียนรวม (เช่น "เลือกตามความสนใจ ม.5 กลุ่ม 2", "กลุ่มเตรียม ม.5", "ม.ต้น") ว่างเมื่อ "ทุกห้องในระดับ"
+       ที่มีคาบกลุ่ม/วิชาเลือกในคาบนั้นไม่อยู่ — ห้องสมาชิก = ห้องในระดับนั้นที่ตารางเรียนเป็นคาบไม่มีครูประจำ (วิชาเลือก/กิจกรรม) */
+    var GAW = {};
+    function groupLevels(label) {
+      var s = String(label || '');
+      if (/ทั้งโรงเรียน/.test(s)) return ['1', '2', '3', '4', '5', '6'];
+      if (/ม\.\s*ต้น/.test(s)) return ['1', '2', '3'];
+      if (/ม\.\s*ปลาย/.test(s)) return ['4', '5', '6'];
+      var m = s.match(/ม\.\s*(\d)(?!\s*\/)/); return m ? [m[1]] : [];
+    }
+    function classAwayAt(cls, d, p) {
+      var k = cls + '|' + d + '|' + p;
+      if (AW[k] || CAT[cls]) return AW[k] || null;                  // ห้องเรียนปกติ
+      if (k in GAW) return GAW[k];
+      var lv = groupLevels(cls), w = wd(d), res = null;
+      if (lv.length && w >= 0) {
+        var rooms = Object.keys(CAT).filter(function (c) { var m = c.match(/^ม\.(\d)\//); return m && lv.indexOf(m[1]) >= 0; });
+        var members = rooms.filter(function (c) { var e = CAT[c][w][p]; return e && !e.tis.length && e.code !== 'พักกลางวัน'; });
+        if (!members.length) members = rooms;
+        if (members.length && members.every(function (c) { return AW[c + '|' + d + '|' + p]; })) res = AW[members[0] + '|' + d + '|' + p];
+      }
+      return (GAW[k] = res);
+    }
     function itemAway(it) { return classAwayAt(it.cls, it.date, it.p); }   // คาบนี้นักเรียนไม่อยู่ = ไม่ต้องสอน
 
     function isSchool(s) { return wd(s) >= 0 && st.holidays.indexOf(s) < 0 && s >= st.termStart && s <= st.termEnd; }
@@ -214,9 +236,11 @@ var SubEngine = (function () {
           var B = ce.tis[0];
           if (O.freed[K(B, d, p)] || leaveAt(O, B, d, p)) continue;
           if ((item.declinedBy || []).indexOf(B) >= 0) continue;
-          if (busy(B, item.date, item.p, O)) continue;
-          if (busy(req.teacher, d, p, O)) continue;
-          list.push({ t: B, date: d, p: p, code: ce.code, subj: ce.subj, same: gOf(B) === g });
+          var bB = busy(B, item.date, item.p, O), bA = busy(req.teacher, d, p, O);
+          if (bB && bB.kind !== 'meet') continue;                          // คาบประชุม = ครูตัดสินใจใช้เป็นคาบว่างได้ (มีคำเตือน)
+          if (bA && bA.kind !== 'meet') continue;
+          list.push({ t: B, date: d, p: p, code: ce.code, subj: ce.subj, same: gOf(B) === g,
+            meetB: bB ? bB.meet : null, meetA: bA ? bA.meet : null });
         }
       });
       list.sort(function (a, b) {
@@ -233,8 +257,9 @@ var SubEngine = (function () {
         for (var p = 1; p <= 9; p++) {
           if (CAT[item.cls][w][p] || p === lunch) continue;
           if (O.classIn[item.cls + '|' + d + '|' + p] || classAwayAt(item.cls, d, p)) continue;
-          if (busy(req.teacher, d, p, O)) continue;
-          list.push({ date: d, p: p });
+          var bA2 = busy(req.teacher, d, p, O);
+          if (bA2 && bA2.kind !== 'meet') continue;
+          list.push({ date: d, p: p, meet: bA2 ? bA2.meet : null });
         }
       });
       list.sort(function (a, b) { return Math.abs(diffDays(item.date, a.date)) - Math.abs(diffDays(item.date, b.date)) || a.p - b.p; });
@@ -1246,11 +1271,12 @@ function apiSaveClassAway(token, rec) {
     var list = classAway_(c.S);
     var p = PropertiesService.getScriptProperties(), n = +(p.getProperty('AWAY_SEQ') || 0) + 1; p.setProperty('AWAY_SEQ', String(n));
     var a = { id: 'CA-' + ('000' + n).slice(-4), date: date, classes: classes, periods: periods, reason: reason, status: 'active', createdBy: me.name, createdAt: now_() };
+    var E0 = c.E;
     list.push(a); saveClassAway_(list);
     c.E = SubEngine.create(c.D, c.requests, engineSettings_(c.S), c.today);     // คำนวณสถานะใหม่ (คาบที่จัดไว้แล้วกลายเป็นไม่ต้องสอน)
     var moot = [];
     c.requests.forEach(function (r) { if (r.status !== 'cancelled') r.items.forEach(function (it) {
-      if (c.E.itemAway(it) === a && !c.E.NT[it.code] && it.method && it.method !== 'none') { moot.push(r.id + ' ' + itemText_(it)); hist_(r, me, 'นักเรียนไม่อยู่ — คาบนี้ไม่ต้องสอน', itemText_(it) + ' (' + a.id + ')'); }
+      if (c.E.itemAway(it) && !E0.itemAway(it) && !c.E.NT[it.code] && it.method && it.method !== 'none') { moot.push(r.id + ' ' + itemText_(it)); hist_(r, me, 'นักเรียนไม่อยู่ — คาบนี้ไม่ต้องสอน', itemText_(it) + ' (' + a.id + ')'); }
     }); });
     log_(me, 'ห้องเรียนไปราชการ', a.id, date + ' · ' + classes.join(', ') + (periods.length ? ' · คาบ ' + periods.join(',') : ' · ทั้งวัน') + ' · ' + reason);
     return { id: a.id, moot: moot };

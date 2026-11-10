@@ -706,11 +706,12 @@ function apiSaveClassAway(token, rec) {
     var list = classAway_(c.S);
     var p = PropertiesService.getScriptProperties(), n = +(p.getProperty('AWAY_SEQ') || 0) + 1; p.setProperty('AWAY_SEQ', String(n));
     var a = { id: 'CA-' + ('000' + n).slice(-4), date: date, classes: classes, periods: periods, reason: reason, status: 'active', createdBy: me.name, createdAt: now_() };
+    var E0 = c.E;
     list.push(a); saveClassAway_(list);
     c.E = SubEngine.create(c.D, c.requests, engineSettings_(c.S), c.today);     // คำนวณสถานะใหม่ (คาบที่จัดไว้แล้วกลายเป็นไม่ต้องสอน)
     var moot = [];
     c.requests.forEach(function (r) { if (r.status !== 'cancelled') r.items.forEach(function (it) {
-      if (c.E.itemAway(it) === a && !c.E.NT[it.code] && it.method && it.method !== 'none') { moot.push(r.id + ' ' + itemText_(it)); hist_(r, me, 'นักเรียนไม่อยู่ — คาบนี้ไม่ต้องสอน', itemText_(it) + ' (' + a.id + ')'); }
+      if (c.E.itemAway(it) && !E0.itemAway(it) && !c.E.NT[it.code] && it.method && it.method !== 'none') { moot.push(r.id + ' ' + itemText_(it)); hist_(r, me, 'นักเรียนไม่อยู่ — คาบนี้ไม่ต้องสอน', itemText_(it) + ' (' + a.id + ')'); }
     }); });
     log_(me, 'ห้องเรียนไปราชการ', a.id, date + ' · ' + classes.join(', ') + (periods.length ? ' · คาบ ' + periods.join(',') : ' · ทั้งวัน') + ' · ' + reason);
     return { id: a.id, moot: moot };

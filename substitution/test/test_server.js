@@ -158,8 +158,8 @@ if (mcase) {
   if (r.ok) H.apiCancel(tok(t), r.data.id, 'test');
   // สลับคาบยังถือว่าคาบประชุมไม่ว่าง
   c = H.ctx_(); E = c.E;
-  const sw = E.candSwapT(mcase.req, it).list.concat([]);
-  ok(sw.every(o => !E.meetingAt(o.t, d, it.p) && !E.meetingAt(t, o.date, o.p)), 'สลับคาบ: ไม่เลือกคาบที่ติดประชุม (คงเดิม)');
+  const sw = E.candSwapT(mcase.req, it).list;
+  ok(sw.every(o => (!!o.meetB === !!E.meetingAt(o.t, d, it.p)) && (!!o.meetA === !!E.meetingAt(t, o.date, o.p))), 'สลับคาบ: ตัวเลือกที่ใช้คาบประชุมมีป้ายเตือนครบ');
 }
 
 /* ---------------------------------------------------------------- 4. รับทราบ / ขอเปลี่ยน / จัดใหม่ / เห็นชอบ */
@@ -342,6 +342,65 @@ console.log('7b) ห้องเรียนไปราชการ (นัก�
   ok(r.ok && r.data.conflicts.some(x => x.indexOf(TT.teachers[T].n) >= 0), 'ยกเลิกแล้ว แจ้งครูที่ถูกจัดซ้อน', JSON.stringify(r.data || r.error));
   ok(H.readRows_('away')[0].status === 'cancelled', 'สถานะในชีตเป็น cancelled (เก็บประวัติ)');
   if (idU) H.apiCancel(tok(U), idU, 't');
+}
+
+/* ---------------------------------------------------------------- 7c. คาบประชุมใช้เป็นคาบว่างของตนเองเพื่อสลับคาบ */
+console.log('7c) ใช้คาบประชุม/PLC ของตนเองเป็นคาบว่างสำหรับสลับคาบ');
+{
+  let c8 = H.ctx_(), E8 = c8.E, got = null;
+  for (let k = 3; k < 12 && !got; k++) {
+    const d = E8.nthSchool(k);
+    for (const t of teachersOn(d)) {
+      if (c8.requests.some(q => q.teacher === t && q.dates.includes(d))) continue;
+      for (const it of E8.buildItems(t, [d])) {
+        if (E8.NT[it.code] || E8.ACT[it.code] || !E8.CAT[it.cls]) continue;
+        const req = { id: '(f)', type: 'official', teacher: t, dates: [d], slots: { [d]: [it.p] }, status: 'open', items: [it] };
+        const f = E8.candSwapF(req, it).list.find(o => o.meet);
+        if (f) { got = { t, d, it, f, req }; break; }
+      }
+      if (got) break;
+    }
+  }
+  ok(!!got, 'มีตัวเลือกสลับคาบว่างที่เป็นคาบประชุมของตนเอง', got && got.f.meet);
+  if (got) {
+    const { t, d, it, f } = got;
+    ok(E8.meetingAt(t, f.date, f.p) === f.meet && /PLC|ประชุม/.test(f.meet), 'ตัวเลือกบอกชื่อการประชุม');
+    r = H.apiSubmit(tok(t), { type: 'official', teacher: t, dates: [d], slots: { [d]: [it.p] }, reason: 't', items: [{ id: it.id, method: 'swapF', swap: { date: f.date, p: f.p } }] });
+    ok(r.ok, 'server ยอมรับการย้ายไปสอนในคาบประชุมของตนเอง', r.error);
+    c8 = H.ctx_();
+    ok(c8.E.busy(t, f.date, f.p, c8.E.occupancy(null)).kind === 'sub', 'หลังจัด: คาบนั้นไม่ว่างแล้ว (ใช้ซ้ำไม่ได้)');
+    if (r.ok) H.apiCancel(tok(t), r.data.id, 't');
+  }
+}
+
+/* ---------------------------------------------------------------- 7d. ไปทั้งระดับ → คาบกลุ่มเรียนรวมว่าง */
+console.log('7d) นักเรียนไปทั้งระดับ → คาบกลุ่มเรียนรวม/วิชาเลือกว่างด้วย');
+{
+  let c9 = H.ctx_(), E9 = c9.E, g = null;
+  for (let k = 5; k < 15 && !g; k++) {
+    const d = E9.nthSchool(k), w = H.SubEngine.wd(d);
+    for (let ti = 0; ti < TT.teachers.length && !g; ti++) for (let p = 1; p <= 9 && !g; p++) {
+      const e = E9.TAT[ti][w][p];
+      if (e && !E9.CAT[e.cls] && /ม\.5/.test(e.cls) && !E9.NT[e.code] && !c9.requests.some(q => q.teacher === ti && q.dates.includes(d))) g = { d, ti, p, label: e.cls };
+    }
+  }
+  ok(!!g, 'พบคาบกลุ่มเรียนรวม ม.5', g && g.label);
+  const { d, ti, p, label } = g;
+  const m5 = c9.D.classes.filter(x => x.startsWith('ม.5/'));
+  r = H.apiSaveClassAway(bossTok, { date: d, classes: m5.slice(0, 1), reason: 'บางห้อง' });
+  c9 = H.ctx_();
+  ok(r.ok && !c9.E.classAwayAt(label, d, p), 'ไปบางห้อง → คาบกลุ่มยังต้องสอน (นักเรียนห้องอื่นยังอยู่)');
+  const id1 = r.data.id;
+  r = H.apiSaveClassAway(bossTok, { date: d, classes: m5.slice(1), reason: 'ที่เหลือทั้งระดับ' });
+  c9 = H.ctx_(); E9 = c9.E;
+  ok(r.ok && !!E9.classAwayAt(label, d, p), 'ไปครบทั้งระดับ (2 รายการรวมกัน) → คาบกลุ่ม “' + label + '” ว่าง');
+  ok(E9.busy(ti, d, p, E9.occupancy(null)) === null, 'ครูกลุ่มเรียนนั้นว่าง รับคาบแทนได้');
+  const its = E9.buildItems(ti, [d], { [d]: [p] });
+  ok(its[0].method === 'none' && E9.itemAway(its[0]), 'ถ้าครูกลุ่มเรียนลา: ไม่ต้องจัดสอนแทนคาบกลุ่ม');
+  ok(!E9.classAwayAt('กลุ่มสาระ', d, p) && !E9.classAwayAt('ฝ่ายวิชาการ', d, p), 'กลุ่มที่ไม่ใช่นักเรียน (ประชุม) ไม่ถูกนับ');
+  H.apiCancelClassAway(bossTok, r.data.id); H.apiCancelClassAway(bossTok, id1);
+  c9 = H.ctx_();
+  ok(!c9.E.classAwayAt(label, d, p), 'ยกเลิกแล้ว คาบกลุ่มกลับมาต้องสอน');
 }
 
 /* ---------------------------------------------------------------- 8. ชีต Users รูปแบบ e-Score จริง */
